@@ -185,6 +185,7 @@ async def get_recent_conversations(collection_name: str, limit: int) -> str:
         Formatted string with timestamp, user_message, and bot_response for each conversation
     """
     try:
+        await ensure_collection_exists(collection_name=collection_name)
         # Get all points first
         scrolled_points, _ = await qdrant_client.scroll(
             collection_name=collection_name,
