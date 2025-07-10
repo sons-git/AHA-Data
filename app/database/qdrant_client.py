@@ -76,7 +76,7 @@ async def ensure_collection_exists(collection_name: str):
     except Exception as e:
         print(f"Error: {e}")
 
-async def add_message_vector(collection_name: str, conversation_id: str, user_message: str, bot_response: str, timestamp: str) -> None:
+async def add_message_vector(collection_name: str, conversation_id: str, user_message: str, user_image: str, bot_response: str, timestamp: str) -> None:
     """
     Embed the user message and insert it into Qdrant.
     If more than 50 messages exist for the user, remove the oldest one first.
@@ -118,6 +118,7 @@ async def add_message_vector(collection_name: str, conversation_id: str, user_me
                         "conversation_id": conversation_id,
                         "timestamp": timestamp,
                         "user_message": user_message,
+                        "user_image": user_image if user_image else None,
                         "bot_response": bot_response
                     }
                 )

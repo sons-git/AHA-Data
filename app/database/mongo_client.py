@@ -9,6 +9,7 @@ from app.schemas.users import UserCreate, UserLogin
 from app.database.redis_client import get_redis_config
 from app.utils.common import serialize_mongo_document, serialize_user
 from app.database.qdrant_client import add_message_vector, delete_conversation_vectors
+from app.database.gcs_client import upload_file_to_gcs
 
 api_keys = get_redis_config("api_keys")
 client = MongoClient(api_keys["MONGO_DB_URL"])
@@ -111,12 +112,17 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
     Returns:
         None
     """
+
+    message.image = upload_file_to_gcs(convo_id, message.image) if message.image else None
+
     message.content = message.content or "" 
     msg = {
         "sender": "user",
         "content": message.content,
         "timestamp": message.timestamp
     }
+    if message.image:
+        msg["image"] = message.image
 
     bot_reply = {
         "sender": "assistant",
@@ -143,6 +149,7 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
         collection_name=user_id,
         conversation_id=convo_id,
         user_message=message.content,
+        user_image=message.image if message.image else None,
         bot_response=response,
         timestamp=msg["timestamp"].isoformat(),
     )
