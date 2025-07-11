@@ -1,53 +1,67 @@
-import asyncio
-from fastapi import APIRouter
+import httpx
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from schemas.conversations import (
+from app.schemas.conversations import (
     Message, 
     Conversation,
     UpdateConversationRequest
 )
-from database.mongo_client import (
+from app.database.mongo_client import (
     create_conversation, get_all_conversations,
     get_conversation_by_id, delete_conversation_by_id, 
     update_conversation_title, save_message
 )
-from database.gcs_client import upload_file_to_gcs
-from app.utils import build_error_response
+from app.database.gcs_client import upload_file_to_gcs
+from app.utils.common import build_error_response
 
 # Create a router with a common prefix and tag for all conversation-related endpoints
 router = APIRouter(prefix="/api/conversations", tags=["Conversations"])
 
 # Endpoint to create a new conversation for a given user
 @router.post("/create/{user_id}", response_model=Conversation)
-async def create_conversation_by_user_id(user_id: str, title: str):
+async def create_conversation_by_user_id(user_id: str, request: Request):
     """
-    Create a new conversation for a given user in MongoDB.
+    Create a new conversation for a given user.
 
     Args:
         user_id (str): The ID of the user.
-        title (str): The title of the conversation.
+        message (Message): The initial message to generate a conversation title.
 
     Returns:
-        Conversation: The newly created conversation with a generated title saved into MongoDB.
+        Conversation: The newly created conversation with a generated title.
     """
     try:
+        if not user_id:
+            return build_error_response("INVALID_INPUT", "User ID is required", 400)
 
-        if not user_id or not title:
-            return build_error_response(
-                "INVALID_INPUT",
-                "User ID and title are required",
-                400
+        body = await request.json()
+
+        async with httpx.AsyncClient(base_url="http://localhost:8001") as client:
+            title_response = await client.post(
+                f"/api/conversations/generate_title/{user_id}",
+                json=body,
+                timeout=30.0
             )
-        
-        # Create the conversation in the database
-        conversation = await create_conversation(user_id=user_id, title=title)
-        # Check if result is an error response
-        if isinstance(conversation, JSONResponse):
-            return conversation 
-        
-        return conversation
-        
+
+            if title_response.status_code != 200:
+                return build_error_response(
+                    "TITLE_GENERATION_FAILED",
+                    f"Failed to generate title: {title_response.text}",
+                    500
+                )
+
+            title = title_response.json().get("title")
+
+        result = create_conversation(user_id=user_id, title=title)
+
+        if isinstance(result, JSONResponse):
+            return result
+
+        return result
+
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return build_error_response(
             "CONVERSATION_CREATION_FAILED",
             f"Failed to create conversation: {str(e)}",
@@ -222,20 +236,32 @@ async def rename_conversation(conversation_id: str, request: UpdateConversationR
             500
         )
 
-@router.post("/{conversation_id}/add_message", response_model=Conversation)
-async def add_message(conversation_id: str, message: Message, response: str):
+@router.post("/{conversation_id}/add_message")
+async def add_message(
+    conversation_id: str, 
+    request: Request
+):
     """
     Add a user message and corresponding assistant response to a conversation.
-
-    Args:
-        conversation_id (str): The ID of the conversation.
-        message (Message): The user message to save.
-        response (str): The assistant's response to save.
-
-    Returns:
-        Conversation: The updated conversation with the new message and response.
     """
     try:
+        body = await request.json()
+        response = body.get("response")
+        
+        if not response:
+            return build_error_response(
+                "INVALID_INPUT",
+                "Response are required",
+                400
+            )
+        
+        # Create Message object from the data
+        message = Message(
+            content=body.get("content"),
+            image=body.get("image"),
+            timestamp=body.get("timestamp")
+        )
+        
         if not conversation_id or not message or not response:
             return build_error_response(
                 "INVALID_INPUT",
@@ -243,21 +269,8 @@ async def add_message(conversation_id: str, message: Message, response: str):
                 400
             )
         
-        updated_convo = await save_message(conversation_id, message, response)
-        
-        # Check if result is an error response
-        if isinstance(updated_convo, JSONResponse):
-            return updated_convo
-        
-        if not updated_convo:
-            return build_error_response(
-                "CONVERSATION_NOT_FOUND",
-                "Conversation not found or could not be updated",
-                404
-            )
-        
-        return updated_convo
-        
+        await save_message(conversation_id, message, response)
+      
     except Exception as e:
         return build_error_response(
             "MESSAGE_SAVE_FAILED",

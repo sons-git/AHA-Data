@@ -13,12 +13,13 @@ langchain_huggingface
 langchain-openai
 
 # Document Handling
+filetype
 
 # Embedding & Vector Stores
 sentence_transformers
 
 # Databases
-google.cloud
+google-cloud-storage
 qdrant_client
 pymongo
 redis

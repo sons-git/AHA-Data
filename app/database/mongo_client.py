@@ -1,18 +1,17 @@
-import os
 import bcrypt
 from typing import Dict
 from bson import ObjectId
 from datetime import datetime
 from pymongo import MongoClient
-from dotenv import load_dotenv
 from fastapi import HTTPException
-from app.utils import serialize_mongo_document, serialize_user
-from schemas.users import UserCreate, UserLogin, Message
-from database.qdrant_client import add_message_vector, delete_conversation_vectors
+from app.schemas.conversations import Message
+from app.schemas.users import UserCreate, UserLogin
+from app.database.redis_client import get_redis_config
+from app.utils.common import serialize_mongo_document, serialize_user
+from app.database.qdrant_client import add_message_vector, delete_conversation_vectors
 
-load_dotenv()
-
-client = MongoClient(os.getenv("MONGO_DB_URL"))
+api_keys = get_redis_config("api_keys")
+client = MongoClient(api_keys["MONGO_DB_URL"])
 db = client["AHA"]
 conversation_collection = db["conversations"]
 user_collection = db["users"]
@@ -96,7 +95,7 @@ def get_conversation_by_id(convo_id: str):
         return None
 
 # Save a user or bot message to an existing conversation
-async def save_message(convo_id: str, message: Message, response: str):
+async def save_message(convo_id: str, message: Message, response: str) -> None:
     """
     Save a user message and corresponding assistant response to a conversation.
 
@@ -112,6 +111,7 @@ async def save_message(convo_id: str, message: Message, response: str):
     Returns:
         None
     """
+    message.content = message.content or "" 
     msg = {
         "sender": "user",
         "content": message.content,

@@ -1,11 +1,11 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-from schemas.users import UserCreate, UserLogin, UserResponse
-from app.utils import build_error_response
-from database.mongo_client import register_user, login_user
+from app.utils.common import build_error_response
+from app.database.mongo_client import register_user, login_user
+from app.schemas.users import UserCreate, UserLogin, UserResponse
 
 # Create router with prefix and tag
-router = APIRouter(prefix="/api/users", tags=["Users"])
+router = APIRouter(prefix="/api/auth", tags=["Users"])
 
 # Endpoint to register a new user
 @router.post("/register", response_model=UserResponse)

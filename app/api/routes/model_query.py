@@ -1,14 +1,14 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-from app.utils import build_error_response
+from app.utils.common import build_error_response
+from app.database.redis_client import get_redis_config
 from qdrant_client.conversions import common_types as types
-from database.qdrant_client import hybrid_search_endpoint
-from database.redis_client import get_redis_config
+from app.database.qdrant_client import hybrid_search_endpoint, get_recent_conversations
 
 router = APIRouter(prefix="/api/model_query", tags=["Model Query"])
 
 @router.get("/hybrid_search")
-def hybrid_search(query: str = None, collection_name: str = None, limit: int = None) -> list[types.QueryResponse]:
+async def hybrid_search(query: str = None, collection_name: str = None, limit: int = None) -> list[types.QueryResponse]:
     """
     Perform a hybrid search using both dense and sparse vectors with Reciprocal Rank Fusion (RRF).
     Args:
@@ -29,7 +29,7 @@ def hybrid_search(query: str = None, collection_name: str = None, limit: int = N
             )
         
         # Perform the hybrid search
-        result = hybrid_search_endpoint(
+        result = await hybrid_search_endpoint(
             query=query,
             collection_name=collection_name,
             limit=limit
@@ -48,6 +48,32 @@ def hybrid_search(query: str = None, collection_name: str = None, limit: int = N
             500
         )
         
+@router.get("/recent_conversations")
+async def recent_conversations(
+    collection_name: str,
+    limit: int
+):
+    """
+    Retrieve the most recent conversations from the specified Qdrant collection.
+
+    Args:
+        collection_name: Name of the Qdrant collection.
+        limit: Number of recent conversations to retrieve (default: 50).
+
+    Returns:
+        JSON response with the formatted conversation string.
+    """
+    try:
+        result = await get_recent_conversations(collection_name=collection_name, limit=limit)
+        return JSONResponse(content={"recent_conversations": result}, status_code=200)
+    
+    except Exception as e:
+        print(f"[API Error] Failed to fetch recent conversations: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to retrieve recent conversations"}
+        )
+   
 @router.get("/get_config")
 def get_config(name: str) -> dict:
     """

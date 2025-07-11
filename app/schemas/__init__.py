@@ -1,2 +1,2 @@
-from schemas.users import *
-from schemas.conversations import *
+from app.schemas.users import *
+from app.schemas.conversations import *
