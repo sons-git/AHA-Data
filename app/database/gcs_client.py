@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Set your bucket name and credentials
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "database/service-account-key.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "app/database/service-account-key.json"
 BUCKET_NAME = os.getenv("BUCKET_NAME")
 
 def upload_file_to_gcs(convo_id: str, base64_data: str) -> str:

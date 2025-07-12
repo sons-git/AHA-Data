@@ -10,3 +10,4 @@ Dockerfile
 __pycache__/
 *.py[cod]
 *$py.class
+app/database/service-account-key.json
