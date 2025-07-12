@@ -3,13 +3,11 @@ import uuid
 import base64
 import filetype
 from google.cloud import storage
-from dotenv import load_dotenv
-
-load_dotenv()
+from app.database.redis_client import get_redis_config
 
 # Set your bucket name and credentials
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "app/database/service-account-key.json"
-BUCKET_NAME = os.getenv("BUCKET_NAME")
+BUCKET_NAME = get_redis_config("api_keys")["BUCKET_NAME"]
 
 def upload_file_to_gcs(convo_id: str, base64_data: str) -> str:
     """
@@ -58,4 +56,4 @@ def upload_file_to_gcs(convo_id: str, base64_data: str) -> str:
     blob = bucket.blob(unique_filename)
     blob.upload_from_string(file_bytes, content_type=content_type)
 
-    return f"https://storage.cloud.google.com/{BUCKET_NAME}/{unique_filename}?authuser=0"
+    return f"https://storage.cloud.google.com/{BUCKET_NAME}/{unique_filename}"
