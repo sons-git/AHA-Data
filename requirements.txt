@@ -5,19 +5,10 @@ pydantic
 # FastAPI & Web Server
 fastapi[standard]
 uvicorn
-# LLM & LangChain Ecosystem
-langchain
-langchain_community
-langchain_text_splitters
-langchain_huggingface
-langchain-openai
-
 # Document Handling
 filetype
-
 # Embedding & Vector Stores
 sentence_transformers
-
 # Databases
 google-cloud-storage
 qdrant_client

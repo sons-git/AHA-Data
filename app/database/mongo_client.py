@@ -1,4 +1,5 @@
 import bcrypt
+import asyncio
 from typing import Dict
 from bson import ObjectId
 from datetime import datetime
@@ -6,6 +7,7 @@ from pymongo import MongoClient
 from fastapi import HTTPException
 from app.schemas.conversations import Message
 from app.schemas.users import UserCreate, UserLogin
+from app.database.gcs_client import upload_file_to_gcs
 from app.database.redis_client import get_redis_config
 from app.utils.common import serialize_mongo_document, serialize_user
 from app.database.qdrant_client import add_message_vector, delete_conversation_vectors
@@ -111,12 +113,18 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
     Returns:
         None
     """
-    message.content = message.content or "" 
+
+    message.image = upload_file_to_gcs(convo_id, message.image) if message.image else None
+    message.content = message.content or None 
+    
     msg = {
         "sender": "user",
         "content": message.content,
+        "image": message.image,
         "timestamp": message.timestamp
     }
+    if message.image:
+        msg["image"] = message.image
 
     bot_reply = {
         "sender": "assistant",
@@ -139,13 +147,16 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
     user_id = convo["user_id"]
 
     # Store the message and bot response vector in Qdrant for retrieval/history
-    await add_message_vector(
-        collection_name=user_id,
-        conversation_id=convo_id,
-        user_message=message.content,
-        bot_response=response,
-        timestamp=msg["timestamp"].isoformat(),
+    asyncio.create_task(
+        add_message_vector(
+            collection_name=user_id,
+            conversation_id=convo_id,
+            user_message=message.content,
+            bot_response=response,
+            timestamp=msg["timestamp"].isoformat(),
+        )
     )
+
 
 """Update the title of a conversation"""
 def update_conversation_title(convo_id: str, new_title: str):

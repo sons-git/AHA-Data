@@ -88,6 +88,8 @@ async def add_message_vector(collection_name: str, conversation_id: str, user_me
         timestamp: Timestamp of the message
     """
     try:
+        message = user_message or "What do you see from this image?"
+        
         # Ensure the collection exists
         await ensure_collection_exists(collection_name)
 
@@ -99,7 +101,7 @@ async def add_message_vector(collection_name: str, conversation_id: str, user_me
             await remove_oldest_message(existing_messages, collection_name)
 
         # Generate dense and sparse embeddings for the message
-        dense_vector, sparse_indices, sparse_values = await embed(user_message)
+        dense_vector, sparse_indices, sparse_values = await embed(message)
 
         # Upsert the message and its embeddings into Qdrant
         await qdrant_client.upsert(
@@ -117,7 +119,7 @@ async def add_message_vector(collection_name: str, conversation_id: str, user_me
                     payload={
                         "conversation_id": conversation_id,
                         "timestamp": timestamp,
-                        "user_message": user_message,
+                        "user_message": message,
                         "bot_response": bot_response
                     }
                 )
