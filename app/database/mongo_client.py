@@ -7,7 +7,7 @@ from pymongo import MongoClient
 from fastapi import HTTPException
 from app.schemas.conversations import Message
 from app.schemas.users import UserCreate, UserLogin
-from app.database.gcs_client import upload_file_to_gcs
+from app.database.gcs_client import upload_file_to_gcs, delete_files_from_gcs
 from app.database.redis_client import get_redis_config
 from app.utils.common import serialize_mongo_document, serialize_user
 from app.database.qdrant_client import add_message_vector, delete_conversation_vectors
@@ -221,7 +221,12 @@ async def delete_conversation_by_id(conversation_id: str, user_id: str) -> Dict:
         await delete_conversation_vectors(collection_name=user_id, conversation_id=conversation_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Deleted in MongoDB but failed in Qdrant: {str(e)}")
-
+    
+    # Step 2: Delete from GCS
+    try:
+        delete_files_from_gcs(conversation_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Deleted in DBs but failed to delete GCS files: {str(e)}")
     return {"message": "Conversation deleted from MongoDB and Qdrant", "conversation_id": conversation_id}
 
 
