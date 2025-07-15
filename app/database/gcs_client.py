@@ -1,12 +1,13 @@
-import os
 import uuid
 import base64
 import filetype
 from google.cloud import storage
+from google.oauth2 import service_account
 from app.database.redis_client import get_redis_config
 
-# Set your bucket name and credentials
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "app/database/service-account-key.json"
+# Get credentials and bucket name
+gcs_key_data = get_redis_config("gcs-service-key")
+credentials = service_account.Credentials.from_service_account_info(gcs_key_data)
 BUCKET_NAME = get_redis_config("api_keys")["BUCKET_NAME"]
 
 def upload_file_to_gcs(convo_id: str, base64_data: str) -> str:
@@ -24,12 +25,10 @@ def upload_file_to_gcs(convo_id: str, base64_data: str) -> str:
         ValueError: If the file type is unsupported or unknown.
     """
     try:
-        # Decode base64 to bytes
         file_bytes = base64.b64decode(base64_data)
     except Exception:
         raise ValueError("Invalid base64 data.")
 
-    # Guess MIME type and extension
     kind = filetype.guess(file_bytes)
     if kind is None:
         raise ValueError("Unsupported or unknown file type.")
@@ -37,7 +36,6 @@ def upload_file_to_gcs(convo_id: str, base64_data: str) -> str:
     content_type = kind.mime
     extension = f".{kind.extension}"
 
-    # Determine folder by MIME type
     if content_type.startswith("image/"):
         folder = f"image/{convo_id}"
     elif content_type.startswith("audio/"):
@@ -47,11 +45,10 @@ def upload_file_to_gcs(convo_id: str, base64_data: str) -> str:
     else:
         raise ValueError("Unsupported file type.")
 
-    # Generate unique filename
     unique_filename = f"{folder}/{uuid.uuid4().hex}{extension}"
 
     # Upload to GCS
-    client = storage.Client()
+    client = storage.Client(credentials=credentials)
     bucket = client.bucket(BUCKET_NAME)
     blob = bucket.blob(unique_filename)
     blob.upload_from_string(file_bytes, content_type=content_type)
@@ -68,10 +65,9 @@ def delete_files_from_gcs(convo_id: str) -> None:
     Raises:
         Exception: If an error occurs during deletion.
     """
-    client = storage.Client()
+    client = storage.Client(credentials=credentials)
     bucket = client.bucket(BUCKET_NAME)
 
-    # List of folder prefixes to check
     folders = [f"image/{convo_id}", f"audio/{convo_id}", f"docs/{convo_id}"]
 
     for prefix in folders:
