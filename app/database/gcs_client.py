@@ -57,3 +57,24 @@ def upload_file_to_gcs(convo_id: str, base64_data: str) -> str:
     blob.upload_from_string(file_bytes, content_type=content_type)
 
     return f"https://storage.cloud.google.com/{BUCKET_NAME}/{unique_filename}"
+
+def delete_files_from_gcs(convo_id: str) -> None:
+    """
+    Deletes all files related to a conversation from GCS.
+
+    Args:
+        convo_id (str): The conversation ID whose files should be deleted.
+
+    Raises:
+        Exception: If an error occurs during deletion.
+    """
+    client = storage.Client()
+    bucket = client.bucket(BUCKET_NAME)
+
+    # List of folder prefixes to check
+    folders = [f"image/{convo_id}", f"audio/{convo_id}", f"docs/{convo_id}"]
+
+    for prefix in folders:
+        blobs = list(bucket.list_blobs(prefix=prefix))
+        for blob in blobs:
+            blob.delete()
