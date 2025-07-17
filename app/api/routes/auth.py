@@ -5,7 +5,7 @@ from app.database.mongo_client import register_user, login_user
 from app.schemas.users import UserCreate, UserLogin, UserResponse
 
 # Create router with prefix and tag
-router = APIRouter(prefix="/api/auth", tags=["Users"])
+router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 # Endpoint to register a new user
 @router.post("/register", response_model=UserResponse)

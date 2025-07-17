@@ -4,7 +4,7 @@ from app.utils.text_processing.text_embedding import (
     get_dense_embedder,
     get_sparse_embedder_and_tokenizer
 )
-from app.api.routes import auth, conversations, model_query
+from app.api.routes import auth, conversations, model_query, user
 from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
@@ -33,4 +33,5 @@ app.add_middleware(
 
 app.include_router(conversations.router)
 app.include_router(auth.router)
+app.include_router(user.router)
 app.include_router(model_query.router)

@@ -279,3 +279,134 @@ def login_user(credentials: UserLogin):
     if user and bcrypt.checkpw(credentials.password.encode("utf-8"), user["password"].encode("utf-8")):
         return serialize_user(user)
     return None
+
+
+def get_user_by_id(user_id: str):
+    """
+    Retrieve a user by their ID.
+    
+    Args:
+        user_id (str): The user's unique identifier
+        
+    Returns:
+        dict: The user document or None if not found
+    """
+    try:
+        # Convert string ID to ObjectId
+        object_id = ObjectId(user_id)
+        
+        # Find user in database
+        user = users_collection.find_one({"_id": object_id})
+        
+        return user
+        
+    except Exception as e:
+        print(f"Error fetching user by ID: {e}")
+        return None
+
+
+def update_user_profile(user_id: str, update_data: dict):
+    """
+    Update a user's profile information (fullName, nickname).
+    
+    Args:
+        user_id (str): The user's unique identifier
+        update_data (dict): Dictionary containing fields to update
+        
+    Returns:
+        dict: The updated user document or None if update failed
+    """
+    try:
+        # Convert string ID to ObjectId
+        object_id = ObjectId(user_id)
+        
+        # Add timestamp for when profile was last updated
+        update_data["updatedAt"] = datetime.utcnow()
+        
+        # Update user in database
+        result = users_collection.update_one(
+            {"_id": object_id},
+            {"$set": update_data}
+        )
+        
+        if result.modified_count == 0:
+            print("No user was updated")
+            return None
+        
+        # Return the updated user document
+        updated_user = users_collection.find_one({"_id": object_id})
+        return updated_user
+        
+    except Exception as e:
+        print(f"Error updating user profile: {e}")
+        return None
+
+
+def update_user_theme(user_id: str, theme: str):
+    """
+    Update a user's theme preference.
+    
+    Args:
+        user_id (str): The user's unique identifier
+        theme (str): The theme preference ("light" or "dark")
+        
+    Returns:
+        dict: The updated user document or None if update failed
+    """
+    try:
+        # Convert string ID to ObjectId
+        object_id = ObjectId(user_id)
+        
+        # Update user theme in database
+        result = users_collection.update_one(
+            {"_id": object_id},
+            {
+                "$set": {
+                    "theme": theme,
+                    "updatedAt": datetime.utcnow()
+                }
+            }
+        )
+        
+        if result.modified_count == 0:
+            print("No user theme was updated")
+            return None
+        
+        # Return the updated user document
+        updated_user = users_collection.find_one({"_id": object_id})
+        return updated_user
+        
+    except Exception as e:
+        print(f"Error updating user theme: {e}")
+        return None
+
+
+def delete_user_account(user_id: str):
+    """
+    Permanently delete a user's account and all associated data.
+    
+    Args:
+        user_id (str): The user's unique identifier
+        
+    Returns:
+        bool: True if deletion was successful, False otherwise
+    """
+    try:
+        # Convert string ID to ObjectId
+        object_id = ObjectId(user_id)
+        
+        # Delete user from database
+        result = users_collection.delete_one({"_id": object_id})
+        
+        if result.deleted_count == 0:
+            print("No user was deleted")
+            return False
+        
+        print(f"Successfully deleted user with ID: {user_id}")        
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error deleting user account: {e}")
+        return False
+
