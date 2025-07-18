@@ -32,26 +32,28 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         HTTPException: If token is invalid or user not found
     """
     try:
-        # Extract token from credentials
-        token = credentials.credentials
-        
-        # TODO: Replace this with your existing token verification logic
-        # For now, assuming you have a way to extract user_id from token
-        # You can implement your own token verification here
-        user_id = "your_token_verification_logic_here"  # Replace with your implementation
+        # Extract token (which is the user's _id) from credentials
+        user_id = credentials.credentials
+        print(f"Received user_id as token: {user_id}")  # Debug log
         
         if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token")
+            raise HTTPException(status_code=401, detail="No user ID provided")
         
-        # Get user from database
+        # Get user from database using the _id
         user = get_user_by_id(user_id)
+        print(f"Found user: {user is not None}")  # Debug log
+        
         if not user:
+            print(f"User not found for ID: {user_id}")  # Debug log
             raise HTTPException(status_code=404, detail="User not found")
             
         return user
         
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=401, detail="Authentication failed")
+        print(f"Auth error: {e}")  # Debug log
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
 
 
 @router.get("/profile", response_model=UserResponse)

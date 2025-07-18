@@ -280,6 +280,14 @@ def login_user(credentials: UserLogin):
         return serialize_user(user)
     return None
 
+# Add these functions to your app/database/mongo_client.py
+
+from pymongo import MongoClient
+from bson import ObjectId
+from datetime import datetime
+import os
+
+# Your existing MongoDB connection code here...
 
 def get_user_by_id(user_id: str):
     """
@@ -292,11 +300,19 @@ def get_user_by_id(user_id: str):
         dict: The user document or None if not found
     """
     try:
+        print(f"Looking for user with ID: {user_id}")  # Debug log
+        
         # Convert string ID to ObjectId
         object_id = ObjectId(user_id)
+        print(f"Converted to ObjectId: {object_id}")  # Debug log
         
-        # Find user in database
-        user = users_collection.find_one({"_id": object_id})
+        # Find user in database - use user_collection (not users_collection)
+        user = user_collection.find_one({"_id": object_id})
+        
+        if user:
+            print(f"Found user: {user.get('email', 'no email')}")  # Debug log
+        else:
+            print("User not found in database")  # Debug log
         
         return user
         
@@ -323,8 +339,8 @@ def update_user_profile(user_id: str, update_data: dict):
         # Add timestamp for when profile was last updated
         update_data["updatedAt"] = datetime.utcnow()
         
-        # Update user in database
-        result = users_collection.update_one(
+        # Update user in database - use user_collection
+        result = user_collection.update_one(
             {"_id": object_id},
             {"$set": update_data}
         )
@@ -334,7 +350,7 @@ def update_user_profile(user_id: str, update_data: dict):
             return None
         
         # Return the updated user document
-        updated_user = users_collection.find_one({"_id": object_id})
+        updated_user = user_collection.find_one({"_id": object_id})
         return updated_user
         
     except Exception as e:
@@ -357,8 +373,8 @@ def update_user_theme(user_id: str, theme: str):
         # Convert string ID to ObjectId
         object_id = ObjectId(user_id)
         
-        # Update user theme in database
-        result = users_collection.update_one(
+        # Update user theme in database - use user_collection
+        result = user_collection.update_one(
             {"_id": object_id},
             {
                 "$set": {
@@ -373,7 +389,7 @@ def update_user_theme(user_id: str, theme: str):
             return None
         
         # Return the updated user document
-        updated_user = users_collection.find_one({"_id": object_id})
+        updated_user = user_collection.find_one({"_id": object_id})
         return updated_user
         
     except Exception as e:
@@ -395,18 +411,29 @@ def delete_user_account(user_id: str):
         # Convert string ID to ObjectId
         object_id = ObjectId(user_id)
         
-        # Delete user from database
-        result = users_collection.delete_one({"_id": object_id})
+        # Delete user from database - use user_collection
+        result = user_collection.delete_one({"_id": object_id})
         
         if result.deleted_count == 0:
             print("No user was deleted")
             return False
         
-        print(f"Successfully deleted user with ID: {user_id}")        
+        print(f"Successfully deleted user with ID: {user_id}")
+        
+        # TODO: You might want to delete related data here:
+        # - User's conversations
+        # - User's vectors in Qdrant
+        # - User's files in GCS
+        
+        # Example:
+        # conversation_collection.delete_many({"user_id": user_id})
+        # delete_user_vectors_from_qdrant(user_id)
+        # delete_user_files_from_gcs(user_id)
         
         return True
         
     except Exception as e:
         print(f"Error deleting user account: {e}")
         return False
+
 
