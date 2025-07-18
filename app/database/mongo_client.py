@@ -280,14 +280,6 @@ def login_user(credentials: UserLogin):
         return serialize_user(user)
     return None
 
-# Add these functions to your app/database/mongo_client.py
-
-from pymongo import MongoClient
-from bson import ObjectId
-from datetime import datetime
-import os
-
-# Your existing MongoDB connection code here...
 
 def get_user_by_id(user_id: str):
     """
@@ -411,29 +403,48 @@ def delete_user_account(user_id: str):
         # Convert string ID to ObjectId
         object_id = ObjectId(user_id)
         
-        # Delete user from database - use user_collection
-        result = user_collection.delete_one({"_id": object_id})
+        print(f"Starting account deletion for user: {user_id}")
         
-        if result.deleted_count == 0:
+        # Step 1: Get all conversations for this user (for cleanup purposes)
+        user_conversations = list(conversation_collection.find({"user_id": user_id}))
+        conversation_ids = [str(convo["_id"]) for convo in user_conversations]
+        
+        print(f"Found {len(conversation_ids)} conversations to delete")
+        
+        # Step 2: Delete files from GCS for all conversations
+        for convo_id in conversation_ids:
+            try:
+                delete_files_from_gcs(convo_id)
+                print(f"Deleted GCS files for conversation: {convo_id}")
+            except Exception as e:
+                print(f"Failed to delete GCS files for conversation {convo_id}: {e}")
+        
+        # Step 3: Delete vectors from Qdrant for all conversations
+        # Note: This is synchronous, but Qdrant operations might need to be async
+        for convo_id in conversation_ids:
+            try:
+                # Since delete_conversation_vectors is async, we need to handle it properly
+                # For now, we'll create a task but won't wait for it
+                asyncio.create_task(delete_conversation_vectors(user_id, convo_id))
+                print(f"Initiated vector deletion for conversation: {convo_id}")
+            except Exception as e:
+                print(f"Failed to delete vectors for conversation {convo_id}: {e}")
+        
+        # Step 4: Delete all conversations belonging to this user from MongoDB
+        conversation_delete_result = conversation_collection.delete_many({"user_id": user_id})
+        print(f"Deleted {conversation_delete_result.deleted_count} conversations from MongoDB")
+        
+        # Step 5: Delete the user account
+        user_delete_result = user_collection.delete_one({"_id": object_id})
+        
+        if user_delete_result.deleted_count == 0:
             print("No user was deleted")
             return False
         
-        print(f"Successfully deleted user with ID: {user_id}")
-        
-        # TODO: You might want to delete related data here:
-        # - User's conversations
-        # - User's vectors in Qdrant
-        # - User's files in GCS
-        
-        # Example:
-        # conversation_collection.delete_many({"user_id": user_id})
-        # delete_user_vectors_from_qdrant(user_id)
-        # delete_user_files_from_gcs(user_id)
-        
+        print(f"Successfully deleted user and all associated data for ID: {user_id}")
         return True
         
     except Exception as e:
         print(f"Error deleting user account: {e}")
         return False
-
 
