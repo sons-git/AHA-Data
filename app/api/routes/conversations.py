@@ -1,5 +1,5 @@
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, File, Request
 from fastapi.responses import JSONResponse
 from app.schemas.conversations import (
     Message, 
@@ -275,5 +275,38 @@ async def add_message(
         return build_error_response(
             "MESSAGE_SAVE_FAILED",
             f"Failed to save message: {str(e)}",
+            500
+        )
+    
+@router.post("/upload_file")
+async def upload_file(convo_id: str, files: list[bytes] = File(...)) -> dict:
+    """
+    Upload multiple files to GCS and return a list of URLs.
+
+    Args:
+        convo_id: The conversation ID used for folder structure.
+        files: List of file content in bytes.
+
+    Returns:
+        A dictionary containing GCS URLs of the uploaded files.
+
+    Raises:
+        HTTPException: If any upload fails or a file type is unsupported.
+    """
+    try:
+        urls = upload_file_to_gcs(convo_id, files)
+        return {"gcs_urls": urls}
+
+    except ValueError as ve:
+        return build_error_response(
+            "UPLOAD_FAILED",
+            str(ve),
+            400
+        )
+    
+    except Exception as e:
+        return build_error_response(
+            "UPLOAD_FAILED",
+            f"Failed to upload files: {str(e)}",
             500
         )

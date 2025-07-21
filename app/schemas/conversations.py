@@ -2,10 +2,16 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 from typing import List, Optional,  Union
 
-class Message(BaseModel):   
+class FileData(BaseModel):
+    name: str
+    type: str
+    url: str
+
+class Message(BaseModel):
     content: Optional[str] = None
-    image: Optional[Union[str, bytes]] = None
+    files: Optional[List[FileData]] = None
     timestamp: Optional[datetime] = None
+
 
 class Conversation(BaseModel):
     id: str
