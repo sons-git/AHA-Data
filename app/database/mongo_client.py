@@ -448,3 +448,66 @@ def delete_user_account(user_id: str):
         print(f"Error deleting user account: {e}")
         return False
 
+
+def get_user_by_email(email: str):
+    """
+    Get user by email address.
+    
+    Args:
+        email (str): User's email address
+        
+    Returns:
+        dict | None: User document if found, None otherwise
+    """
+    try:
+        user = user_collection.find_one({"email": email})
+        return user  # Return the full user document including password for verification
+        
+    except Exception as e:
+        print(f"Error getting user by email: {str(e)}")
+        return None
+
+
+def update_user_password(email: str, new_password: str) -> bool:
+    """
+    Update user's password.
+    
+    Args:
+        email (str): User's email address
+        new_password (str): New password (plain text)
+        
+    Returns:
+        bool: True if password updated successfully, False otherwise
+    """
+    try:
+        # Hash the new password using the same method as registration
+        hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+        
+        # Update password in database
+        result = user_collection.update_one(
+            {"email": email},
+            {
+                "$set": {
+                    "password": hashed_password.decode("utf-8"),  # Store as string like in register
+                    "updatedAt": datetime.utcnow()
+                }
+            }
+        )
+        
+        if result.modified_count > 0:
+            print(f"Password updated successfully for {email}")
+            return True
+        else:
+            print(f"No user found with email {email}")
+            return False
+            
+    except Exception as e:
+        print(f"Error updating password: {str(e)}")
+        return False
+
+
+def get_database():
+    """
+    Get database instance.
+    """
+    return db  # Use your existing db variable
