@@ -114,17 +114,29 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
         None
     """
 
-    message.image = upload_file_to_gcs(convo_id, message.image) if message.image else None
     message.content = message.content or None 
+
+    files = []
+    for f in (message.files or []):
+        file_dict = f.dict()
+
+        # If url is base64
+        if file_dict.get("url", ""):
+            try:
+                gcs_url = upload_file_to_gcs(convo_id, file_dict["url"])
+                file_dict["url"] = gcs_url
+            except Exception as e:
+                print(f"Failed to upload {file_dict['name']} to GCS: {e}")
+                # fallback: keep original URL (not ideal but prevents crash)
+
+        files.append(file_dict)
     
     msg = {
         "sender": "user",
         "content": message.content,
-        "image": message.image,
+        "files": files,
         "timestamp": message.timestamp
     }
-    if message.image:
-        msg["image"] = message.image
 
     bot_reply = {
         "sender": "assistant",

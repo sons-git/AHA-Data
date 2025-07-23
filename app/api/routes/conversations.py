@@ -258,7 +258,7 @@ async def add_message(
         # Create Message object from the data
         message = Message(
             content=body.get("content"),
-            image=body.get("image"),
+            files=body.get("files"),
             timestamp=body.get("timestamp")
         )
         
