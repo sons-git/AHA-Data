@@ -1,5 +1,4 @@
 import bcrypt
-import asyncio
 from typing import Dict
 from bson import ObjectId
 from datetime import datetime
@@ -10,7 +9,7 @@ from app.schemas.users import UserCreate, UserLogin
 from app.database.gcs_client import upload_file_to_gcs, delete_files_from_gcs
 from app.database.redis_client import get_redis_config
 from app.utils.common import serialize_mongo_document, serialize_user
-from app.database.qdrant_client import add_message_vector, delete_conversation_vectors
+from app.database.qdrant_client import delete_conversation_vectors
 
 api_keys = get_redis_config("api_keys")
 client = MongoClient(api_keys["MONGO_DB_URL"])
@@ -113,24 +112,27 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
     Returns:
         None
     """
-
-    message.content = message.content or None 
+    # Ensure content is None instead of empty string
+    message.content = message.content or None
 
     files = []
-    for f in (message.files or []):
-        file_dict = f.dict()
+    for file_data in (message.files or []):
+        try:
+            gcs_url = upload_file_to_gcs(convo_id, file_data)
+            files.append({
+                "name": file_data.name,
+                "type": file_data.type,
+                "file": gcs_url
+            })
+        except Exception as e:
+            print(f"Failed to upload {file_data.name} to GCS: {e}")
+            # fallback: mark upload failed but keep metadata
+            files.append({
+                "name": file_data.name,
+                "type": file_data.type,
+                "file": file_data.file if isinstance(file_data.file, str) else None
+            })
 
-        # If url is base64
-        if file_dict.get("url", ""):
-            try:
-                gcs_url = upload_file_to_gcs(convo_id, file_dict["url"])
-                file_dict["url"] = gcs_url
-            except Exception as e:
-                print(f"Failed to upload {file_dict['name']} to GCS: {e}")
-                # fallback: keep original URL (not ideal but prevents crash)
-
-        files.append(file_dict)
-    
     msg = {
         "sender": "user",
         "content": message.content,
@@ -143,32 +145,12 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
         "content": response,
         "timestamp": datetime.utcnow()
     }
-    
+
     # Push both user message and bot reply into the conversation
     conversation_collection.update_one(
         {"_id": ObjectId(convo_id)},
         {"$push": {"messages": {"$each": [msg, bot_reply]}}}
     )
-    
-    # Add message to Qdrant for history tracking
-    # Lookup conversation
-    convo = conversation_collection.find_one({"_id": ObjectId(convo_id)})
-    if not convo:
-        return None
-    # Extract user_id from the conversation document
-    user_id = convo["user_id"]
-
-    # Store the message and bot response vector in Qdrant for retrieval/history
-    asyncio.create_task(
-        add_message_vector(
-            collection_name=user_id,
-            conversation_id=convo_id,
-            user_message=message.content,
-            bot_response=response,
-            timestamp=msg["timestamp"].isoformat(),
-        )
-    )
-
 
 """Update the title of a conversation"""
 def update_conversation_title(convo_id: str, new_title: str):

@@ -5,13 +5,25 @@ from typing import List, Optional,  Union
 class FileData(BaseModel):
     name: str
     type: str
-    url: str
+    file: Union[str, bytes]
 
 class Message(BaseModel):
     content: Optional[str] = None
     files: Optional[List[FileData]] = None
-    timestamp: Optional[datetime] = None
+    timestamp: datetime
 
+class ProcessedMessage(BaseModel):
+    content: Optional[str] = None
+    images: Optional[List[str]] = None
+    context: Optional[str] = None
+    recent_conversations: Optional[str] = None
+
+class WebSearchResponse(BaseModel):
+    content: str
+    search_result: str
+    url: str
+    title: str
+    score: Optional[float] = None
 
 class Conversation(BaseModel):
     id: str

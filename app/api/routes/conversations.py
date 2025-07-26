@@ -1,7 +1,9 @@
-import httpx
-from fastapi import APIRouter, File, Request
+from fastapi import APIRouter, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+import httpx
 from app.schemas.conversations import (
+    FileData,
     Message, 
     Conversation,
     UpdateConversationRequest
@@ -11,9 +13,10 @@ from app.database.mongo_client import (
     get_conversation_by_id, delete_conversation_by_id, 
     update_conversation_title, save_message
 )
-from app.database.gcs_client import upload_file_to_gcs
-from app.utils.common import build_error_response
+from app.utils.common import build_error_response, classify_message
+from app.utils.file_processing import handle_file_processing
 
+base_url = "http://localhost:8001"
 # Create a router with a common prefix and tag for all conversation-related endpoints
 router = APIRouter(prefix="/api/conversations", tags=["Conversations"])
 
@@ -35,13 +38,54 @@ async def create_conversation_by_user_id(user_id: str, request: Request):
             return build_error_response("INVALID_INPUT", "User ID is required", 400)
 
         body = await request.json()
-        title = body.get("title")
-        if not title:
-            return build_error_response("INVALID_INPUT", "Title is required", 400)
+        files_data = []
+        content = None
+        
+        if "content" in body and isinstance(body["content"], str) and body["content"]:
+            content = body.get("content")
+            
+        if "files" in body and isinstance(body["files"], list):
+            for file_item in body["files"]:
+                # Ensure all required fields are present
+                if all(k in file_item for k in ("name", "type", "file")):
+                    files_data.append(
+                        FileData(
+                            name=file_item["name"],
+                            type=file_item["type"],
+                            file=file_item["file"]
+                        )
+                    )
+            
+        message = Message(
+            content=content,
+            files=files_data if files_data else None,
+            timestamp=body.get("timestamp")
+        )
+        
+        processed_file = await handle_file_processing(message.content, message.files)
+        processed_message = jsonable_encoder(processed_file)
+
+        async with httpx.AsyncClient(base_url) as client:
+            title_response = await client.post(
+                f"/api/conversations/generate_title/{user_id}",
+                json=processed_message,
+                timeout=30.0
+            )
+
+            if title_response.status_code != 200:
+                return build_error_response(
+                    "TITLE_GENERATION_FAILED",
+                    f"Failed to generate title: {title_response.text}",
+                    500
+                )
+
+            title = title_response.json().get("title")
 
         result = create_conversation(user_id=user_id, title=title)
+
         if isinstance(result, JSONResponse):
             return result
+
         return result
 
     except Exception as e:
@@ -243,7 +287,7 @@ async def add_message(
         # Create Message object from the data
         message = Message(
             content=body.get("content"),
-            files=body.get("files"),
+            image=body.get("image"),
             timestamp=body.get("timestamp")
         )
         
@@ -263,3 +307,85 @@ async def add_message(
             500
         )
     
+@router.post("/{conversation_id}/{user_id}/stream")
+async def stream_message(conversation_id: str, user_id: str, request: Request):
+    """
+    Stream a response to a user's message (text, image, or both) and update the conversation.
+
+    Args:
+        conversation_id (str): The ID of the conversation to append the response to.
+        user_id (str): The ID of the user sending the message.
+        message (Message): The message object containing text and/or image.
+
+    Returns:
+        StreamingResponse: A streamed response via Server-Sent Events (SSE).
+    """
+    try:
+        if not conversation_id or not user_id:
+            return build_error_response(
+                "INVALID_INPUT",
+                "Conversation ID and user ID are required",
+                400
+            )
+        
+        body = await request.json()
+        files_data = []
+        content = None
+        
+        if "content" in body and isinstance(body["content"], str) and body["content"]:
+            content = body.get("content")
+            
+        if "files" in body and isinstance(body["files"], list):
+            for file_item in body["files"]:
+                # Ensure all required fields are present
+                if all(k in file_item for k in ("name", "type", "file")):
+                    files_data.append(
+                        FileData(
+                            name=file_item["name"],
+                            type=file_item["type"],
+                            file=file_item["file"]
+                        )
+                    )
+            
+        message = Message(
+            content=content,
+            files=files_data if files_data else None,
+            timestamp=body.get("timestamp")
+        )
+        
+        if not message:
+            return build_error_response(
+                "INVALID_INPUT",
+                "Message is required",
+                400
+            )
+        
+        if not message.content and not message.image:
+            return build_error_response(
+                "INVALID_INPUT",
+                "Message must contain either text content or image",
+                400
+            )
+        
+        processed_file = await handle_file_processing(message.content, message.files)
+        classified_message = await classify_message(processed_file, user_id)
+
+        processed_message = jsonable_encoder(classified_message)
+        async with httpx.AsyncClient(base_url=base_url, timeout=10.0) as client:
+            response = await client.get(
+                "/api/conversations/{conversation_id}/{user_id}/stream",
+                params=processed_message
+            )
+
+        if response.status_code != 200:
+            raise Exception(f"RAG service returned error: {response.status_code} - {response.text}")
+        
+        return response.json().get("response", "")# Generate the response s
+        return 
+        
+    except Exception as e:
+        return build_error_response(
+            "STREAM_INITIALIZATION_FAILED",
+            f"Failed to initialize message stream: {str(e)}",
+            500
+        )

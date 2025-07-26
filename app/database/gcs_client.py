@@ -4,19 +4,20 @@ import filetype
 from google.cloud import storage
 from google.oauth2 import service_account
 from app.database.redis_client import get_redis_config
+from app.schemas.conversations import FileData
 
 # Get credentials and bucket name
 gcs_key_data = get_redis_config("gcs-service-key")
 credentials = service_account.Credentials.from_service_account_info(gcs_key_data)
 BUCKET_NAME = get_redis_config("api_keys")["BUCKET_NAME"]
 
-def upload_file_to_gcs(convo_id: str, base64_data: str) -> str:
+def upload_file_to_gcs(convo_id: str, file_data: FileData) -> str:
     """
-    Uploads a base64-encoded file to GCS and returns its GCS URL.
+    Uploads a file (base64 string or bytes) to GCS and returns its GCS URL.
 
     Args:
         convo_id (str): The conversation ID used for folder structure.
-        base64_data (str): The base64-encoded content of the file.
+        file_data (FileData): File data object containing name, type, and content.
 
     Returns:
         str: The GCS URL of the uploaded file.
@@ -24,33 +25,35 @@ def upload_file_to_gcs(convo_id: str, base64_data: str) -> str:
     Raises:
         ValueError: If the file type is unsupported or unknown.
     """
-   # Remove prefix if present: "data:<mime>;base64,"
-    if base64_data.startswith("data:"):
-        header, base64_str = base64_data.split(",", 1)
+    # Handle file content
+    if isinstance(file_data.file, str):
+        # If string, assume base64; strip prefix if present
+        base64_str = file_data.file.split(",", 1)[-1] if file_data.file.startswith("data:") else file_data.file
+        try:
+            file_bytes = base64.b64decode(base64_str)
+        except Exception:
+            raise ValueError("Invalid base64 data.")
+    elif isinstance(file_data.file, (bytes, bytearray)):
+        file_bytes = file_data.file
     else:
-        base64_str = base64_data
-
-    try:
-        file_bytes = base64.b64decode(base64_str)
-    except Exception:
-        raise ValueError("Invalid base64 data.")
-
-    kind = filetype.guess(file_bytes)
-    if kind is None:
-        raise ValueError("Unsupported or unknown file type.")
-
-    content_type = kind.mime
-    extension = f".{kind.extension}"
+        raise ValueError("File content must be base64 string or bytes.")
 
     # Determine folder based on content type
-    if content_type.startswith("image/"):
+    if file_data.type.startswith("image/"):
         folder = f"image/{convo_id}"
-    elif content_type.startswith("audio/"):
+    elif file_data.type.startswith("audio/"):
         folder = f"audio/{convo_id}"
-    elif content_type.startswith("application/"):
+    elif file_data.type.startswith("application/") or file_data.type.startswith("text/"):
         folder = f"docs/{convo_id}"
     else:
         raise ValueError("Unsupported file type.")
+
+    # Determine file extension
+    if hasattr(file_data, "name") and "." in file_data.name:
+        extension = "." + file_data.name.split(".")[-1]
+    else:
+        kind = filetype.guess(file_bytes)
+        extension = f".{kind.extension}" if kind else ""
 
     unique_filename = f"{folder}/{uuid.uuid4().hex}{extension}"
 
@@ -58,7 +61,7 @@ def upload_file_to_gcs(convo_id: str, base64_data: str) -> str:
     client = storage.Client(credentials=credentials)
     bucket = client.bucket(BUCKET_NAME)
     blob = bucket.blob(unique_filename)
-    blob.upload_from_string(file_bytes, content_type=content_type)
+    blob.upload_from_string(file_bytes, content_type=file_data.type)
 
     return f"https://storage.cloud.google.com/{BUCKET_NAME}/{unique_filename}"
 
