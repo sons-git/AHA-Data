@@ -2,9 +2,11 @@ from fastapi.responses import JSONResponse
 from datetime import datetime
 import time
 import asyncio
-
+import dspy
 from app.database.qdrant_client import get_recent_conversations, hybrid_search_endpoint
 from app.schemas.conversations import ProcessedMessage
+from app.services.manage_models import model_manager
+from googletrans import Translator
 from app.utils.text_processing.reciprocal_rank_fusion import rrf
 
 # Helper function to build a standardized JSON error response
@@ -89,6 +91,21 @@ def log_execution_time(start_time: float = None, process_name: str = None) -> No
     end_color = "[/green]" if color else ""
     print(f"{process_name} inference took {color}{execution_time:.2f} seconds{end_color}")
 
+async def get_classifier() -> dspy.Module:
+    """
+    Load and return the classifier model from the model manager.
+    Returns:
+        dspy.Module: The classifier module for zero-shot classification.
+    Raises:
+        Exception: If the classifier model cannot be loaded.
+    """
+    try:
+        classifier = model_manager.get_model("classifier")
+        return classifier
+    except Exception as e:
+        print(f"Failed to load classifier: {str(e)}")
+        raise Exception(f"Classifier loading failed: {str(e)}")
+    
 # Async function to classify text
 async def classify_text(processed_message: ProcessedMessage = None) -> str:
     """
@@ -108,7 +125,7 @@ async def classify_text(processed_message: ProcessedMessage = None) -> str:
             translate_task = translator.translate(
                 text=processed_message.content, src="auto", dest="en"
             )
-            classifier_task = cls.get_classifier()
+            classifier_task = get_classifier()
             start_time = time.time()
             translated_prompt, classifier = await asyncio.gather(
                 translate_task, classifier_task
