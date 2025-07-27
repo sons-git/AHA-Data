@@ -26,7 +26,7 @@ except Exception as e:
     print(f"Connection failed: {e}")
 
 # Create a new conversation document in the database
-def create_conversation(user_id: str, title: str):
+async def create_conversation(user_id: str, title: str):
     """
     Create a new conversation document for a given user.
 
@@ -43,7 +43,7 @@ def create_conversation(user_id: str, title: str):
         "created_at": datetime.utcnow(),
         "messages": []
     }
-    result = conversation_collection.insert_one(convo)
+    result = await conversation_collection.insert_one(convo)
 
     # Add the inserted ObjectId as a string id for frontend compatibility
     convo["id"] = str(result.inserted_id)
@@ -446,7 +446,6 @@ async def delete_user_account(user_id: str):
         # Step 3: Delete vectors from Qdrant (async, fire-and-forget)
         for convo_id in conversation_ids:
             try:
-                asyncio.create_task(delete_conversation_vectors(user_id, convo_id))
                 print(f"Initiated vector deletion for conversation: {convo_id}")
             except Exception as e:
                 print(f"Failed to delete vectors for conversation {convo_id}: {e}")

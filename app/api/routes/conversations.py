@@ -1,6 +1,5 @@
 import httpx
-
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -21,14 +20,14 @@ from app.schemas.conversations import (
 from app.utils.file_processing import handle_file_processing
 from app.utils.common import build_error_response, classify_message
 
-base_url = "https://aha-backend-239662288538.asia-southeast1.run.app"
+base_url = "http://localhost:8001"
 
 # Create a router with a common prefix and tag for all conversation-related endpoints
 router = APIRouter(prefix="/api/conversations", tags=["Conversations"])
 
 
 @router.post("/create/{user_id}", response_model=Conversation)
-async def create_conversation_by_user_id(user_id: str, message: Message, request: Request):
+async def create_conversation_by_user_id(user_id: str, message: Message):
     """
     Create a new conversation for a given user.
 
@@ -41,32 +40,6 @@ async def create_conversation_by_user_id(user_id: str, message: Message, request
     try:
         if not user_id:
             return build_error_response("INVALID_INPUT", "User ID is required", 400)
-
-        # body = await request.json()
-        # files_data = []
-        # content = None
-
-        # # Extract content and files from request body
-        # if "content" in body and isinstance(body["content"], str) and body["content"]:
-        #     content = body.get("content")
-
-        # if "files" in body and isinstance(body["files"], list):
-        #     for file_item in body["files"]:
-        #         # Ensure all required fields are present
-        #         if all(k in file_item for k in ("name", "type", "file")):
-        #             files_data.append(
-        #                 FileData(
-        #                     name=file_item["name"],
-        #                     type=file_item["type"],
-        #                     file=file_item["file"]
-        #                 )
-        #             )
-
-        # message = Message(
-        #     content=content,
-        #     files=files_data if files_data else None,
-        #     timestamp=body.get("timestamp")
-        # )
 
         # Process files and generate conversation title
         processed_file = await handle_file_processing(message.content, message.files)
@@ -88,7 +61,7 @@ async def create_conversation_by_user_id(user_id: str, message: Message, request
 
             title = title_response.json().get("title")
 
-        result = create_conversation(user_id=user_id, title=title)
+        result = await create_conversation(user_id=user_id, title=title)
 
         if isinstance(result, JSONResponse):
             return result
@@ -271,7 +244,7 @@ async def rename_conversation(conversation_id: str, request: UpdateConversationR
 
 
 @router.post("/{conversation_id}/{user_id}/stream")
-async def stream_message(conversation_id: str, user_id: str, message: Message, request: Request):
+async def stream_message(conversation_id: str, user_id: str, message: Message):
     """
     Stream a response to a user's message (text, image, or both) and update the conversation.
 
@@ -289,32 +262,6 @@ async def stream_message(conversation_id: str, user_id: str, message: Message, r
                 "Conversation ID and user ID are required",
                 400
             )
-
-        # body = await request.json()
-        # files_data = []
-        # content = None
-
-        # # Extract content and files from request body
-        # if "content" in body and isinstance(body["content"], str) and body["content"]:
-        #     content = body.get("content")
-
-        # if "files" in body and isinstance(body["files"], list):
-        #     for file_item in body["files"]:
-        #         # Ensure all required fields are present
-        #         if all(k in file_item for k in ("name", "type", "file")):
-        #             files_data.append(
-        #                 FileData(
-        #                     name=file_item["name"],
-        #                     type=file_item["type"],
-        #                     file=file_item["file"]
-        #                 )
-        #             )
-
-        # message = Message(
-        #     content=content,
-        #     files=files_data if files_data else None,
-        #     timestamp=body.get("timestamp")
-        # )
 
         if not message:
             return build_error_response(

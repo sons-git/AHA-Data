@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import conversations, auth, model_query
+from app.api.routes import conversations, auth, model_query, user
 from app.services.manage_models.model_manager import model_manager
 
 @asynccontextmanager
@@ -53,3 +53,4 @@ app.add_middleware(
 app.include_router(conversations.router)
 app.include_router(auth.router)
 app.include_router(model_query.router)
+app.include_router(user.router)

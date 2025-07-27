@@ -18,7 +18,7 @@ from app.schemas.users import (
 router = APIRouter(prefix="/api/users", tags=["Users"])
 security = HTTPBearer()
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """
     Extract and verify the current user from the authorization token.
     
@@ -40,7 +40,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             raise HTTPException(status_code=401, detail="No user ID provided")
         
         # Get user from database using the _id
-        user = get_user_by_id(user_id)
+        user = await get_user_by_id(user_id)
         print(f"Found user: {user is not None}")  # Debug log
         
         if not user:
@@ -57,7 +57,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 
 
 @router.get("/profile", response_model=UserResponse)
-def get_user_profile(current_user: dict = Depends(get_current_user)):
+async def get_user_profile(current_user: dict = Depends(get_current_user)):
     """
     Get the current user's profile information.
     
@@ -82,7 +82,7 @@ def get_user_profile(current_user: dict = Depends(get_current_user)):
 
 
 @router.put("/profile", response_model=UserResponse)
-def update_user_profile_endpoint(
+async def update_user_profile_endpoint(
     profile_data: UserUpdateProfile,
     current_user: dict = Depends(get_current_user)
 ):
@@ -120,7 +120,7 @@ def update_user_profile_endpoint(
         
         # Update user in database
         user_id = str(current_user["_id"])
-        updated_user = update_user_profile(user_id, update_data)
+        updated_user = await update_user_profile(user_id, update_data)
         
         if not updated_user:
             return build_error_response(
@@ -148,7 +148,7 @@ def update_user_profile_endpoint(
 
 
 @router.put("/theme", response_model=UserResponse)
-def update_user_theme_endpoint(
+async def update_user_theme_endpoint(
     theme_data: UserUpdateTheme,
     current_user: dict = Depends(get_current_user)
 ):
@@ -173,7 +173,7 @@ def update_user_theme_endpoint(
         
         # Update user theme in database
         user_id = str(current_user["_id"])
-        updated_user = update_user_theme(user_id, theme_data.theme)
+        updated_user = await update_user_theme(user_id, theme_data.theme)
         
         if not updated_user:
             return build_error_response(
@@ -215,7 +215,7 @@ async def delete_user_account_endpoint(current_user: dict = Depends(get_current_
         user_id = str(current_user["_id"])
         
         # Delete user account from database
-        deletion_result = delete_user_account(user_id)
+        deletion_result = await delete_user_account(user_id)
         
         if not deletion_result:
             return build_error_response(

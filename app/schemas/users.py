@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel, EmailStr
 
 class UserCreate(BaseModel):
@@ -16,3 +17,21 @@ class UserResponse(BaseModel):
     fullName: str
     email: EmailStr
     phone: str
+
+class UserUpdateProfile(BaseModel):
+    fullName: Optional[str] = None
+    nickname: Optional[str] = None
+
+class UserUpdateTheme(BaseModel):
+    theme: str  # "light" or "dark"
+
+class UserChangePassword(BaseModel):
+    currentPassword: str
+    newPassword: str
+    
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
