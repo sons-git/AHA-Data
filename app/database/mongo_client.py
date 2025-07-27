@@ -6,10 +6,9 @@ from pymongo import MongoClient
 from fastapi import HTTPException
 from app.schemas.conversations import Message
 from app.schemas.users import UserCreate, UserLogin
-from app.database.gcs_client import upload_file_to_gcs, delete_files_from_gcs
 from app.database.redis_client import get_redis_config
 from app.utils.common import serialize_mongo_document, serialize_user
-from app.database.qdrant_client import delete_conversation_vectors
+from app.database.gcs_client import upload_file_to_gcs, delete_files_from_gcs
 
 api_keys = get_redis_config("api_keys")
 client = MongoClient(api_keys["MONGO_DB_URL"])
@@ -209,12 +208,6 @@ async def delete_conversation_by_id(conversation_id: str, user_id: str) -> Dict:
 
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Conversation not found or already deleted")
-
-    # Step 2: Delete from Qdrant
-    try:
-        await delete_conversation_vectors(collection_name=user_id, conversation_id=conversation_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Deleted in MongoDB but failed in Qdrant: {str(e)}")
     
     # Step 2: Delete from GCS
     try:
@@ -222,6 +215,47 @@ async def delete_conversation_by_id(conversation_id: str, user_id: str) -> Dict:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Deleted in DBs but failed to delete GCS files: {str(e)}")
     return {"message": "Conversation deleted from MongoDB and Qdrant", "conversation_id": conversation_id}
+
+async def get_recent_conversations(convo_id: str, limit: int = 100) -> list[str]:
+    """
+    Retrieve the last `limit` messages from a specific conversation. 
+    Args:
+        convo_id (str): The conversation ID to fetch messages from.
+        limit (int): The maximum number of messages to return (default: 100).   
+    Returns:
+        list[str]: A list of formatted strings containing user and bot messages.
+    """
+    try:
+        if not ObjectId.is_valid(convo_id):
+            raise ValueError("Invalid conversation ID format")
+        
+        # Fetch conversation by ID
+        conversation = await conversation_collection.find_one({"_id": ObjectId(convo_id)})
+        if not conversation:
+            return [f"No conversation found with ID: {convo_id}. This is user's first ever message"]
+
+        # Limit to last `limit` messages
+        messages = conversation.get("messages", [])[-limit:]
+        output_list = []
+        idx = 1
+
+        for i in range(0, len(messages), 2):
+            user_msg = ""
+            bot_msg = ""
+
+            if i < len(messages) and messages[i].get("sender") == "user":
+                user_msg = messages[i].get("content", "")
+
+            if i + 1 < len(messages) and messages[i + 1].get("sender") == "assistant":
+                bot_msg = messages[i + 1].get("content", "")
+
+            output_list.append(f"Conversation {idx}:\n{user_msg}\n{bot_msg}")
+            idx += 1
+
+        return output_list
+    except Exception as e:
+        print(f"Error retrieving recent conversations: {e}")
+        return None
 
 
 def register_user(user_data: UserCreate):

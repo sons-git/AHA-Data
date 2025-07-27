@@ -1,11 +1,11 @@
 import csv
 import io
 import base64
+from docx import Document
 from PyPDF2 import PdfReader
+from typing import List, Tuple, Optional
 from app.schemas.conversations import FileData, ProcessedMessage
 from app.utils.image_processing import convert_to_dspy_image
-from docx import Document
-from typing import List, Tuple, Optional
 
 def extract_text(file_data: FileData) -> Optional[str]:
     """
@@ -24,18 +24,18 @@ def extract_text(file_data: FileData) -> Optional[str]:
         else:
             content_bytes = file_data.file
 
-        # Plain text and markdown
+        # Handle plain text and markdown files
         if file_data.type in {"text/plain", "text/markdown"}:
             return content_bytes.decode("utf-8", errors="ignore")
 
-        # CSV
+        # Handle CSV files
         elif file_data.type == "text/csv":
             decoded = content_bytes.decode("utf-8", errors="ignore")
             reader = csv.reader(io.StringIO(decoded))
             rows = [" | ".join(row) for row in reader]
             return "\n".join(rows) if rows else None
 
-        # PDF
+        # Handle PDF files
         elif file_data.type == "application/pdf":
             reader = PdfReader(io.BytesIO(content_bytes))
             if reader.is_encrypted:
@@ -50,7 +50,7 @@ def extract_text(file_data: FileData) -> Optional[str]:
                     print(f"Failed to extract text from page {page_num} in {file_data.name}: {e}")
             return "\n".join(extracted) if extracted else None
 
-        # DOCX
+        # Handle DOCX files
         elif file_data.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             doc = Document(io.BytesIO(content_bytes))
             paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
@@ -67,8 +67,6 @@ def extract_text(file_data: FileData) -> Optional[str]:
         print(f"Failed to extract text from {file_data.name}: {e}")
         return None
 
-
-
 def classify_file(files: List[FileData]) -> Tuple[List[FileData], List[FileData]]:
     """
     Classify files into images and documents based on their MIME types.
@@ -79,6 +77,7 @@ def classify_file(files: List[FileData]) -> Tuple[List[FileData], List[FileData]
     Returns:
         Tuple[List[FileData], List[FileData]]: Two lists - one for image files, one for document files.
     """
+    # Separate image files and document files by MIME type
     image_files = [f for f in files if f.type.startswith("image/")]
     doc_files = [f for f in files if f.type.startswith(("text/", "application/"))]
     return image_files, doc_files
@@ -108,23 +107,21 @@ async def handle_file_processing(content: str, files: List[FileData]) -> Process
     # Classify files into images and documents
     image_files, doc_files = classify_file(files)
 
-    # Process document files (extract text)
+    # Extract text from document files
     for file_data in doc_files:
         text = extract_text(file_data)
         if text:
             extracted_texts.append(text)
 
-    # Process image files (convert to dspy.Image)
+    # Convert image files to dspy.Image objects
     for file_data in image_files:
-        # Convert input file to dspy.Image
         try:
             dspy_image = await convert_to_dspy_image(file_data.file)
             dspy_images.append(dspy_image)
         except Exception as e:
-            # Optionally log error instead of stopping processing
             print(f"Failed to convert image {file_data.name}: {e}")
 
-    # Combine original content + extracted text
+    # Combine original content with extracted text
     combined_content = "\n\n".join(filter(None, [content] + extracted_texts))
 
     return ProcessedMessage(

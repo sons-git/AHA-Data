@@ -1,10 +1,10 @@
-from app.database.redis_client import get_redis_config
-from typing import Dict, Any
+from typing import Any, Dict
 from app.models import Classifier
 from app.utils import (
-    get_dense_embedder, 
-    get_sparse_embedder_and_tokenizer
+    get_dense_embedder,
+    get_sparse_embedder_and_tokenizer,
 )
+from app.database.redis_client import get_redis_config
 
 class ModelManager:
     """Manages the lifecycle of ML models."""

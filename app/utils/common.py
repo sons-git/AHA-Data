@@ -1,12 +1,12 @@
-from fastapi.responses import JSONResponse
-from datetime import datetime
 import time
 import asyncio
 import dspy
-from app.database.qdrant_client import get_recent_conversations, hybrid_search_endpoint
+from datetime import datetime
+from googletrans import Translator
+from fastapi.responses import JSONResponse
+from app.database.qdrant_client import hybrid_search
 from app.schemas.conversations import ProcessedMessage
 from app.services.manage_models import model_manager
-from googletrans import Translator
 from app.utils.text_processing.reciprocal_rank_fusion import rrf
 
 # Helper function to build a standardized JSON error response
@@ -150,6 +150,7 @@ async def classify_message(processed_message: ProcessedMessage, user_id: str) ->
     Returns:
         ProcessedMessage: Updates processed_message in place.
     """
+    from app.database.mongo_client import get_recent_conversations
     text_result = await classify_text(processed_message=processed_message)
     is_medical = text_result != "not related to medical" and text_result != "code"
 
@@ -160,7 +161,7 @@ async def classify_message(processed_message: ProcessedMessage, user_id: str) ->
                 collection_name=user_id,
                 limit=50
             ),
-            hybrid_search_endpoint(
+            hybrid_search(
                 query=processed_message.content,
                 collection_name=text_result,
                 limit=4

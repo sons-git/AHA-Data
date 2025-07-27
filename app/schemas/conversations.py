@@ -15,8 +15,8 @@ class Message(BaseModel):
 class ProcessedMessage(BaseModel):
     content: Optional[str] = None
     images: Optional[List[str]] = None
-    context: Optional[str] = None
-    recent_conversations: Optional[str] = None
+    context: Optional[List[str]] = None
+    recent_conversations: Optional[List[str]] = None
 
 class WebSearchResponse(BaseModel):
     content: str
