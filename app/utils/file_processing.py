@@ -96,7 +96,7 @@ async def handle_file_processing(content: str, files: List[FileData]) -> Process
     if not files:
         return ProcessedMessage(
             content=content,
-            images=[],
+            images=None,
             context=None,
             recent_conversations=None
         )

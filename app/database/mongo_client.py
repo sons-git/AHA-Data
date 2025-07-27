@@ -5,13 +5,14 @@ from datetime import datetime
 from pymongo import MongoClient
 from fastapi import HTTPException
 from app.schemas.conversations import Message
+from motor.motor_asyncio import AsyncIOMotorClient
 from app.schemas.users import UserCreate, UserLogin
 from app.database.redis_client import get_redis_config
 from app.utils.common import serialize_mongo_document, serialize_user
 from app.database.gcs_client import upload_file_to_gcs, delete_files_from_gcs
 
 api_keys = get_redis_config("api_keys")
-client = MongoClient(api_keys["MONGO_DB_URL"])
+client = AsyncIOMotorClient(api_keys["MONGO_DB_URL"])
 db = client["AHA"]
 conversation_collection = db["conversations"]
 user_collection = db["users"]
@@ -232,7 +233,7 @@ async def get_recent_conversations(convo_id: str, limit: int = 100) -> list[str]
         # Fetch conversation by ID
         conversation = await conversation_collection.find_one({"_id": ObjectId(convo_id)})
         if not conversation:
-            return [f"No conversation found with ID: {convo_id}. This is user's first ever message"]
+            return ["This is user's first ever message"]
 
         # Limit to last `limit` messages
         messages = conversation.get("messages", [])[-limit:]
@@ -249,9 +250,8 @@ async def get_recent_conversations(convo_id: str, limit: int = 100) -> list[str]
             if i + 1 < len(messages) and messages[i + 1].get("sender") == "assistant":
                 bot_msg = messages[i + 1].get("content", "")
 
-            output_list.append(f"Conversation {idx}:\n{user_msg}\n{bot_msg}")
+            output_list.append(f"Conversation {idx}:\nuser's message: {user_msg}\nassistant's response: {bot_msg}")
             idx += 1
-
         return output_list
     except Exception as e:
         print(f"Error retrieving recent conversations: {e}")

@@ -6,7 +6,7 @@ from googletrans import Translator
 from fastapi.responses import JSONResponse
 from app.database.qdrant_client import hybrid_search
 from app.schemas.conversations import ProcessedMessage
-from app.services.manage_models import model_manager
+from app.services.manage_models.model_manager import model_manager
 from app.utils.text_processing.reciprocal_rank_fusion import rrf
 
 # Helper function to build a standardized JSON error response
@@ -140,46 +140,47 @@ async def classify_text(processed_message: ProcessedMessage = None) -> str:
         raise Exception(f"Text classification failed: {str(e)}")
 
 # Async function to fetch recent conversations and points
-async def classify_message(processed_message: ProcessedMessage, user_id: str) -> ProcessedMessage:
+async def classify_message(processed_message: ProcessedMessage, convo_id: str) -> ProcessedMessage:
     """
     Fetch recent conversations and points concurrently, then update the processed_message context.
 
     Args:
         processed_message: The message object to update.
+        convo_id: The conversation ID to fetch recent messages from.
 
     Returns:
         ProcessedMessage: Updates processed_message in place.
     """
     from app.database.mongo_client import get_recent_conversations
-    text_result = await classify_text(processed_message=processed_message)
+    
+    # Start both operations concurrently
+    text_task = asyncio.create_task(classify_text(processed_message=processed_message))
+    recent_convos_task = asyncio.create_task(get_recent_conversations(convo_id=convo_id, limit=50))
+    
+    # Wait for text classification first (needed to determine if medical)
+    text_result = await text_task
     is_medical = text_result != "not related to medical" and text_result != "code"
-
+    
+    # If medical, start hybrid search while waiting for recent conversations
     if is_medical:
-        # Medical text - use RAG
-        processed_message.recent_conversations, points = await asyncio.gather(
-            get_recent_conversations(
-                collection_name=user_id,
-                limit=50
-            ),
-            hybrid_search(
-                query=processed_message.content,
-                collection_name=text_result,
-                limit=4
-            )
+        hybrid_search_task = asyncio.create_task(hybrid_search(
+            query=processed_message.content,
+            collection_name=text_result,
+            limit=4
+        ))
+        
+        # Wait for both remaining operations
+        recent_conversations, points = await asyncio.gather(
+            recent_convos_task,
+            hybrid_search_task
         )
+        
         processed_message.context = rrf(points=points, n_points=3, payload=["text"])
-        return processed_message
-    elif text_result == "code":
-        # Code-related text - use LLM responder
-        processed_message.recent_conversations = await get_recent_conversations(
-            collection_name=user_id,
-            limit=50
-        ) # Assuming context is the content for code
-        return processed_message
     else:
-        # Non-medical text - use general LLM
-        processed_message.recent_conversations = await get_recent_conversations(
-            collection_name=user_id,
-            limit=50
-        )
-        return processed_message
+        # Just wait for recent conversations
+        recent_conversations = await recent_convos_task
+    
+    # Update recent conversations
+    processed_message.recent_conversations = recent_conversations
+    
+    return processed_message

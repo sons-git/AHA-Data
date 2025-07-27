@@ -28,7 +28,7 @@ class Classifier:
         """
         result = await asyncio.to_thread(
             self.zero_shot_text_classification,
-            prompt,
+            prompt[:100],
             candidate_labels=self.candidate_labels
         )
         return result["labels"][0]

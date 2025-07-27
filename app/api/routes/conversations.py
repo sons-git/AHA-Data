@@ -21,14 +21,14 @@ from app.schemas.conversations import (
 from app.utils.file_processing import handle_file_processing
 from app.utils.common import build_error_response, classify_message
 
-base_url = "http://localhost:8001"
+base_url = "https://aha-backend-239662288538.asia-southeast1.run.app"
 
 # Create a router with a common prefix and tag for all conversation-related endpoints
 router = APIRouter(prefix="/api/conversations", tags=["Conversations"])
 
 
 @router.post("/create/{user_id}", response_model=Conversation)
-async def create_conversation_by_user_id(user_id: str, request: Request):
+async def create_conversation_by_user_id(user_id: str, message: Message, request: Request):
     """
     Create a new conversation for a given user.
 
@@ -42,31 +42,31 @@ async def create_conversation_by_user_id(user_id: str, request: Request):
         if not user_id:
             return build_error_response("INVALID_INPUT", "User ID is required", 400)
 
-        body = await request.json()
-        files_data = []
-        content = None
+        # body = await request.json()
+        # files_data = []
+        # content = None
 
-        # Extract content and files from request body
-        if "content" in body and isinstance(body["content"], str) and body["content"]:
-            content = body.get("content")
+        # # Extract content and files from request body
+        # if "content" in body and isinstance(body["content"], str) and body["content"]:
+        #     content = body.get("content")
 
-        if "files" in body and isinstance(body["files"], list):
-            for file_item in body["files"]:
-                # Ensure all required fields are present
-                if all(k in file_item for k in ("name", "type", "file")):
-                    files_data.append(
-                        FileData(
-                            name=file_item["name"],
-                            type=file_item["type"],
-                            file=file_item["file"]
-                        )
-                    )
+        # if "files" in body and isinstance(body["files"], list):
+        #     for file_item in body["files"]:
+        #         # Ensure all required fields are present
+        #         if all(k in file_item for k in ("name", "type", "file")):
+        #             files_data.append(
+        #                 FileData(
+        #                     name=file_item["name"],
+        #                     type=file_item["type"],
+        #                     file=file_item["file"]
+        #                 )
+        #             )
 
-        message = Message(
-            content=content,
-            files=files_data if files_data else None,
-            timestamp=body.get("timestamp")
-        )
+        # message = Message(
+        #     content=content,
+        #     files=files_data if files_data else None,
+        #     timestamp=body.get("timestamp")
+        # )
 
         # Process files and generate conversation title
         processed_file = await handle_file_processing(message.content, message.files)
@@ -272,7 +272,7 @@ async def rename_conversation(conversation_id: str, request: UpdateConversationR
 
 
 @router.post("/{conversation_id}/{user_id}/stream")
-async def stream_message(conversation_id: str, user_id: str, request: Request):
+async def stream_message(conversation_id: str, user_id: str, message: Message, request: Request):
     """
     Stream a response to a user's message (text, image, or both) and update the conversation.
 
@@ -291,31 +291,31 @@ async def stream_message(conversation_id: str, user_id: str, request: Request):
                 400
             )
 
-        body = await request.json()
-        files_data = []
-        content = None
+        # body = await request.json()
+        # files_data = []
+        # content = None
 
-        # Extract content and files from request body
-        if "content" in body and isinstance(body["content"], str) and body["content"]:
-            content = body.get("content")
+        # # Extract content and files from request body
+        # if "content" in body and isinstance(body["content"], str) and body["content"]:
+        #     content = body.get("content")
 
-        if "files" in body and isinstance(body["files"], list):
-            for file_item in body["files"]:
-                # Ensure all required fields are present
-                if all(k in file_item for k in ("name", "type", "file")):
-                    files_data.append(
-                        FileData(
-                            name=file_item["name"],
-                            type=file_item["type"],
-                            file=file_item["file"]
-                        )
-                    )
+        # if "files" in body and isinstance(body["files"], list):
+        #     for file_item in body["files"]:
+        #         # Ensure all required fields are present
+        #         if all(k in file_item for k in ("name", "type", "file")):
+        #             files_data.append(
+        #                 FileData(
+        #                     name=file_item["name"],
+        #                     type=file_item["type"],
+        #                     file=file_item["file"]
+        #                 )
+        #             )
 
-        message = Message(
-            content=content,
-            files=files_data if files_data else None,
-            timestamp=body.get("timestamp")
-        )
+        # message = Message(
+        #     content=content,
+        #     files=files_data if files_data else None,
+        #     timestamp=body.get("timestamp")
+        # )
 
         if not message:
             return build_error_response(
@@ -333,16 +333,15 @@ async def stream_message(conversation_id: str, user_id: str, request: Request):
 
         # Process files and classify message
         processed_file = await handle_file_processing(message.content, message.files)
-        classified_message = await classify_message(processed_file, user_id)
+        classified_message = await classify_message(processed_file, conversation_id)
         processed_message = jsonable_encoder(classified_message)
-
         async def event_generator():
             """
             Generator function to stream data as Server-Sent Events (SSE).
             """
             final_response = ""
             async with httpx.AsyncClient(base_url=base_url, timeout=None) as client:
-                async with client.stream("GET", "/api/conversations/stream", params=processed_message) as response:
+                async with client.stream("POST", "/api/conversations/stream", json=processed_message, timeout=30.0) as response:
                     async for line in response.aiter_lines():
                         if not line or not line.startswith("data: "):
                             continue
@@ -353,7 +352,7 @@ async def stream_message(conversation_id: str, user_id: str, request: Request):
                         yield f"data: {data}\n\n"
 
             # Save full response once stream finishes
-            await save_message(conversation_id=conversation_id, message=message, response=final_response)
+            await save_message(convo_id=conversation_id, message=message, response=final_response)
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
