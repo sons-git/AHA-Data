@@ -51,7 +51,7 @@ def create_conversation(user_id: str, title: str):
     return convo
 
 # Retrieve all conversation documents and serialize ObjectId to id
-def get_all_conversations(user_id: str):
+async def get_all_conversations(user_id: str):
     """
     Retrieve all conversations belonging to a specific user.
 
@@ -62,7 +62,8 @@ def get_all_conversations(user_id: str):
         list: A list of serialized conversation documents.
     """
     # Only get conversations belonging to this user
-    conversations = list(conversation_collection.find({"user_id": user_id}))
+    cursor = conversation_collection.find({"user_id": user_id})
+    conversations = await cursor.to_list(length=None)  # or set a limit
     
     for convo in conversations:
         if "_id" in convo:
@@ -72,7 +73,7 @@ def get_all_conversations(user_id: str):
     return conversations
 
 # Retrieve a single conversation by its string id
-def get_conversation_by_id(convo_id: str):
+async def get_conversation_by_id(convo_id: str):
     """
     Retrieve a single conversation by its ID.
 
@@ -86,7 +87,7 @@ def get_conversation_by_id(convo_id: str):
         Catches and logs errors if the ObjectId is invalid or a DB error occurs.
     """
     try:
-        convo = conversation_collection.find_one({"_id": ObjectId(convo_id)})
+        convo = await conversation_collection.find_one({"_id": ObjectId(convo_id)})
         if convo:
             return serialize_mongo_document(convo)
         return None
@@ -118,14 +119,13 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
     files = []
     for file_data in (message.files or []):
         try:
-            gcs_url = upload_file_to_gcs(convo_id, file_data)
+            gcs_url = await upload_file_to_gcs(convo_id, file_data)
             files.append({
                 "name": file_data.name,
                 "type": file_data.type,
                 "file": gcs_url
             })
         except Exception as e:
-            print(f"Failed to upload {file_data.name} to GCS: {e}")
             # fallback: mark upload failed but keep metadata
             files.append({
                 "name": file_data.name,
@@ -153,7 +153,7 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
     )
 
 """Update the title of a conversation"""
-def update_conversation_title(convo_id: str, new_title: str):
+async def update_conversation_title(convo_id: str, new_title: str):
     """
     Update the title of a specific conversation.
 
@@ -165,7 +165,7 @@ def update_conversation_title(convo_id: str, new_title: str):
         dict | None: The updated conversation document, or None if update failed.
     """
     try:
-        result = conversation_collection.update_one(
+        result = await conversation_collection.update_one(
             {"_id": ObjectId(convo_id)},
             {"$set": {"title": new_title}}
         )
@@ -174,7 +174,7 @@ def update_conversation_title(convo_id: str, new_title: str):
             return None
             
         # Return the updated conversation
-        updated_convo = conversation_collection.find_one({"_id": ObjectId(convo_id)})
+        updated_convo = await conversation_collection.find_one({"_id": ObjectId(convo_id)})
         return serialize_mongo_document(updated_convo)
         
     except Exception as e:
@@ -202,7 +202,7 @@ async def delete_conversation_by_id(conversation_id: str, user_id: str) -> Dict:
         raise HTTPException(status_code=400, detail="Invalid conversation ID")
 
     # Step 1: Delete from MongoDB
-    result = conversation_collection.delete_one({
+    result = await conversation_collection.delete_one({
         "_id": ObjectId(conversation_id),
         "user_id": user_id
     })
@@ -258,7 +258,7 @@ async def get_recent_conversations(convo_id: str, limit: int = 100) -> list[str]
         return None
 
 
-def register_user(user_data: UserCreate):
+async def register_user(user_data: UserCreate):
     """
     Register a new user after validating uniqueness and hashing the password.
 
@@ -271,8 +271,7 @@ def register_user(user_data: UserCreate):
     Raises:
         ValueError: If a user with the same email already exists.
     """
-    print("Registering use function:", user_data)
-    existing_user = user_collection.find_one({"email": user_data.email})
+    existing_user = await user_collection.find_one({"email": user_data.email})
     if existing_user:
         raise ValueError("User already exists")
 
@@ -281,19 +280,16 @@ def register_user(user_data: UserCreate):
     new_user = {
         "fullName": user_data.fullName,
         "email": user_data.email,
-        "password": hashed_pw.decode("utf-8"),  # Store as string
+        "password": hashed_pw.decode("utf-8"),  
         "phone": user_data.phone
     }
-    print("Create new user", new_user)
     
-
-    result = user_collection.insert_one(new_user)
-    print("Inserted user with ID:", result.inserted_id)
+    result = await user_collection.insert_one(new_user)
     new_user["_id"] = result.inserted_id
     return serialize_user(new_user)
 
 
-def login_user(credentials: UserLogin):
+async def login_user(credentials: UserLogin):
     """
     Authenticate a user using email and password.
 
@@ -303,7 +299,236 @@ def login_user(credentials: UserLogin):
     Returns:
         dict | None: Serialized user if authentication is successful, else None.
     """
-    user = user_collection.find_one({"email": credentials.email})
+    user = await user_collection.find_one({"email": credentials.email})
     if user and bcrypt.checkpw(credentials.password.encode("utf-8"), user["password"].encode("utf-8")):
         return serialize_user(user)
     return None
+
+
+async def get_user_by_id(user_id: str):
+    """
+    Retrieve a user by their ID.
+    
+    Args:
+        user_id (str): The user's unique identifier
+        
+    Returns:
+        dict: The user document or None if not found
+    """
+    try:
+        
+        # Convert string ID to ObjectId
+        object_id = ObjectId(user_id)
+        
+        # Find user in database - use user_collection (not users_collection)
+        user = await user_collection.find_one({"_id": object_id})
+        
+        if user:
+            print(f"Found user: {user.get('email', 'no email')}")  # Debug log
+        else:
+            print("User not found in database")  # Debug log
+        
+        return user
+        
+    except Exception as e:
+        print(f"Error fetching user by ID: {e}")
+        return None
+
+
+async def update_user_profile(user_id: str, update_data: dict):
+    """
+    Update a user's profile information (fullName, nickname).
+    
+    Args:
+        user_id (str): The user's unique identifier
+        update_data (dict): Dictionary containing fields to update
+        
+    Returns:
+        dict: The updated user document or None if update failed
+    """
+    try:
+        # Convert string ID to ObjectId
+        object_id = ObjectId(user_id)
+        
+        # Add timestamp for when profile was last updated
+        update_data["updatedAt"] = datetime.utcnow()
+        
+        # Update user in database - use user_collection
+        result = await user_collection.update_one(
+            {"_id": object_id},
+            {"$set": update_data}
+        )
+        
+        if result.modified_count == 0:
+            print("No user was updated")
+            return None
+        
+        # Return the updated user document
+        updated_user = await user_collection.find_one({"_id": object_id})
+        return updated_user
+        
+    except Exception as e:
+        print(f"Error updating user profile: {e}")
+        return None
+
+
+async def update_user_theme(user_id: str, theme: str):
+    """
+    Update a user's theme preference.
+    
+    Args:
+        user_id (str): The user's unique identifier
+        theme (str): The theme preference ("light" or "dark")
+        
+    Returns:
+        dict: The updated user document or None if update failed
+    """
+    try:
+        # Convert string ID to ObjectId
+        object_id = ObjectId(user_id)
+        
+        # Update user theme in database - use user_collection
+        result = await user_collection.update_one(
+            {"_id": object_id},
+            {
+                "$set": {
+                    "theme": theme,
+                    "updatedAt": datetime.utcnow()
+                }
+            }
+        )
+        
+        if result.modified_count == 0:
+            print("No user theme was updated")
+            return None
+        
+        # Return the updated user document
+        updated_user = await user_collection.find_one({"_id": object_id})
+        return updated_user
+        
+    except Exception as e:
+        print(f"Error updating user theme: {e}")
+        return None
+
+
+from bson import ObjectId
+import asyncio
+
+async def delete_user_account(user_id: str):
+    """
+    Permanently delete a user's account and all associated data.
+    
+    Args:
+        user_id (str): The user's unique identifier
+        
+    Returns:
+        bool: True if deletion was successful, False otherwise
+    """
+    try:
+        object_id = ObjectId(user_id)
+        print(f"Starting account deletion for user: {user_id}")
+        
+        # Step 1: Get all conversations for this user (for cleanup purposes)
+        cursor = conversation_collection.find({"user_id": user_id})
+        user_conversations = await cursor.to_list(length=None)
+        conversation_ids = [str(convo["_id"]) for convo in user_conversations]
+        
+        print(f"Found {len(conversation_ids)} conversations to delete")
+        
+        # Step 2: Delete files from GCS for all conversations
+        for convo_id in conversation_ids:
+            try:
+                delete_files_from_gcs(convo_id)
+                print(f"Deleted GCS files for conversation: {convo_id}")
+            except Exception as e:
+                print(f"Failed to delete GCS files for conversation {convo_id}: {e}")
+        
+        # Step 3: Delete vectors from Qdrant (async, fire-and-forget)
+        for convo_id in conversation_ids:
+            try:
+                asyncio.create_task(delete_conversation_vectors(user_id, convo_id))
+                print(f"Initiated vector deletion for conversation: {convo_id}")
+            except Exception as e:
+                print(f"Failed to delete vectors for conversation {convo_id}: {e}")
+        
+        # Step 4: Delete all conversations from MongoDB
+        conversation_delete_result = await conversation_collection.delete_many({"user_id": user_id})
+        print(f"Deleted {conversation_delete_result.deleted_count} conversations from MongoDB")
+        
+        # Step 5: Delete the user account
+        user_delete_result = await user_collection.delete_one({"_id": object_id})
+        
+        if user_delete_result.deleted_count == 0:
+            print("No user was deleted")
+            return False
+        
+        print(f"Successfully deleted user and all associated data for ID: {user_id}")
+        return True
+        
+    except Exception as e:
+        print(f"Error deleting user account: {e}")
+        return False
+
+
+async def get_user_by_email(email: str):
+    """
+    Get user by email address.
+    
+    Args:
+        email (str): User's email address
+        
+    Returns:
+        dict | None: User document if found, None otherwise
+    """
+    try:
+        user = await user_collection.find_one({"email": email})
+        return user  # Return the full user document including password for verification
+        
+    except Exception as e:
+        print(f"Error getting user by email: {str(e)}")
+        return None
+
+
+async def update_user_password(email: str, new_password: str) -> bool:
+    """
+    Update user's password.
+    
+    Args:
+        email (str): User's email address
+        new_password (str): New password (plain text)
+        
+    Returns:
+        bool: True if password updated successfully, False otherwise
+    """
+    try:
+        # Hash the new password using the same method as registration
+        hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+        
+        # Update password in database
+        result = await user_collection.update_one(
+            {"email": email},
+            {
+                "$set": {
+                    "password": hashed_password.decode("utf-8"),  # Store as string like in register
+                    "updatedAt": datetime.utcnow()
+                }
+            }
+        )
+        
+        if result.modified_count > 0:
+            print(f"Password updated successfully for {email}")
+            return True
+        else:
+            print(f"No user found with email {email}")
+            return False
+            
+    except Exception as e:
+        print(f"Error updating password: {str(e)}")
+        return False
+
+
+def get_database():
+    """
+    Get database instance.
+    """
+    return db  # Use your existing db variable

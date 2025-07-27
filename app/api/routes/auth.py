@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/auth", tags=["Users"])
 
 # Endpoint to register a new user
 @router.post("/register", response_model=UserResponse)
-def register(user: UserCreate):
+async def register(user: UserCreate):
     """
     Register a new user in the system.
 
@@ -64,8 +64,7 @@ def register(user: UserCreate):
                 400
             )
         
-        result = register_user(user)
-        print("Serialized user result:", result)
+        result = await register_user(user)
         
         # Check if result is an error response
         if isinstance(result, JSONResponse):
@@ -104,7 +103,7 @@ def register(user: UserCreate):
 
 # Endpoint to login a user
 @router.post("/login", response_model=UserResponse)
-def login(user: UserLogin):
+async def login(user: UserLogin):
     """
     Authenticate an existing user and return user information.
 
@@ -144,7 +143,8 @@ def login(user: UserLogin):
                 400
             )
         
-        result = login_user(user)
+        print(user)
+        result = await login_user(user)
         
         # Check if result is an error response
         if isinstance(result, JSONResponse):

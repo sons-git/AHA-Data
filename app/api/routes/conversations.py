@@ -106,7 +106,7 @@ async def create_conversation_by_user_id(user_id: str, message: Message, request
 
 
 @router.get("/user/{user_id}", response_model=list[Conversation])
-def get_all_conversations_by_user_id(user_id: str):
+async def get_all_conversations_by_user_id(user_id: str):
     """
     Retrieve all conversations belonging to a specific user.
 
@@ -124,9 +124,8 @@ def get_all_conversations_by_user_id(user_id: str):
                 400
             )
 
-        conversations = get_all_conversations(user_id)
+        conversations = await get_all_conversations(user_id)
 
-        # Check if result is an error response
         if isinstance(conversations, JSONResponse):
             return conversations
 
@@ -141,7 +140,7 @@ def get_all_conversations_by_user_id(user_id: str):
 
 
 @router.get("/chat/{conversation_id}", response_model=Conversation)
-def get_conversation(conversation_id: str):
+async def get_conversation(conversation_id: str):
     """
     Retrieve a conversation by its unique conversation ID.
 
@@ -159,7 +158,7 @@ def get_conversation(conversation_id: str):
                 400
             )
 
-        convo = get_conversation_by_id(conversation_id)
+        convo = await get_conversation_by_id(conversation_id)
 
         # Check if result is an error response
         if isinstance(convo, JSONResponse):
@@ -248,7 +247,7 @@ async def rename_conversation(conversation_id: str, request: UpdateConversationR
                 400
             )
 
-        updated_convo = update_conversation_title(conversation_id, request.title)
+        updated_convo = await update_conversation_title(conversation_id, request.title)
 
         # Check if result is an error response
         if isinstance(updated_convo, JSONResponse):
