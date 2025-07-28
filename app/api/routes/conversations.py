@@ -1,6 +1,8 @@
 import httpx
-from fastapi import APIRouter
+import traceback
+from typing import List
 from fastapi.encoders import jsonable_encoder
+from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.database.mongo_client import (
@@ -69,7 +71,6 @@ async def create_conversation_by_user_id(user_id: str, message: Message):
         return result
 
     except Exception as e:
-        import traceback
         traceback.print_exc()
         return build_error_response(
             "CONVERSATION_CREATION_FAILED",
@@ -244,7 +245,11 @@ async def rename_conversation(conversation_id: str, request: UpdateConversationR
 
 
 @router.post("/{conversation_id}/{user_id}/stream")
-async def stream_message(conversation_id: str, user_id: str, message: Message):
+async def stream_message(conversation_id: str,
+    user_id: str,
+    content: str = Form(None),
+    timestamp: str = Form(None),
+    files: List[UploadFile] = File(default=[])):
     """
     Stream a response to a user's message (text, image, or both) and update the conversation.
 
@@ -256,6 +261,22 @@ async def stream_message(conversation_id: str, user_id: str, message: Message):
         StreamingResponse: A streamed response via Server-Sent Events (SSE).
     """
     try:
+        # Convert UploadFile to FileData
+        file_data_list = []
+        for upload in files:
+            file_bytes = await upload.read()
+            file_data_list.append(FileData(
+                name=upload.filename,
+                type=upload.content_type,
+                file=file_bytes
+            ))
+
+        message = Message(
+            content=content,
+            files=file_data_list,
+            timestamp=timestamp
+        )
+        
         if not conversation_id or not user_id:
             return build_error_response(
                 "INVALID_INPUT",
@@ -270,10 +291,10 @@ async def stream_message(conversation_id: str, user_id: str, message: Message):
                 400
             )
 
-        if not message.content and not getattr(message, "image", None):
+        if not message.content and not getattr(message, "files", None):
             return build_error_response(
                 "INVALID_INPUT",
-                "Message must contain either text content or image",
+                "Message must contain either text content or files",
                 400
             )
 
@@ -304,6 +325,7 @@ async def stream_message(conversation_id: str, user_id: str, message: Message):
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 
     except Exception as e:
+        traceback.print_exc()
         return build_error_response(
             "STREAM_INITIALIZATION_FAILED",
             f"Failed to initialize message stream: {str(e)}",

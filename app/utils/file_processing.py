@@ -93,6 +93,9 @@ async def handle_file_processing(content: str, files: List[FileData]) -> Process
     Returns:
         ProcessedMessage: Combined text content and list of dspy.Image objects.
     """
+    if isinstance(content, str) and content.strip() == "":
+        content = None
+    
     if not files:
         return ProcessedMessage(
             content=content,
@@ -100,7 +103,6 @@ async def handle_file_processing(content: str, files: List[FileData]) -> Process
             context=None,
             recent_conversations=None
         )
-
     extracted_texts = []
     dspy_images = []
 
@@ -116,14 +118,19 @@ async def handle_file_processing(content: str, files: List[FileData]) -> Process
     # Convert image files to dspy.Image objects
     for file_data in image_files:
         try:
-            dspy_image = await convert_to_dspy_image(file_data.file)
+            if isinstance(file_data.file, (bytes, bytearray)):
+                base64_data = base64.b64encode(file_data.file).decode("utf-8")
+            else:
+                print(f"Unsupported file type for image {file_data.name}")
+                continue
+
+            dspy_image = await convert_to_dspy_image(base64_data)
             dspy_images.append(dspy_image)
         except Exception as e:
             print(f"Failed to convert image {file_data.name}: {e}")
 
     # Combine original content with extracted text
     combined_content = "\n\n".join(filter(None, [content] + extracted_texts))
-
     return ProcessedMessage(
         content=combined_content,
         images=dspy_images,

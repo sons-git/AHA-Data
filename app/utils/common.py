@@ -154,12 +154,13 @@ async def classify_message(processed_message: ProcessedMessage, convo_id: str) -
     from app.database.mongo_client import get_recent_conversations
     
     # Start both operations concurrently
-    text_task = asyncio.create_task(classify_text(processed_message=processed_message))
+    is_medical = False
+    if processed_message.content:
+        text_task = asyncio.create_task(classify_text(processed_message=processed_message))
+        text_result = await text_task
+        is_medical = text_result != "not related to medical" and text_result != "code"
+        
     recent_convos_task = asyncio.create_task(get_recent_conversations(convo_id=convo_id, limit=50))
-    
-    # Wait for text classification first (needed to determine if medical)
-    text_result = await text_task
-    is_medical = text_result != "not related to medical" and text_result != "code"
     
     # If medical, start hybrid search while waiting for recent conversations
     if is_medical:

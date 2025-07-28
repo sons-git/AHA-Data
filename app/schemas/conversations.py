@@ -1,11 +1,12 @@
+import dspy
 from datetime import datetime
 from pydantic import BaseModel, Field
-from typing import List, Optional,  Union
+from typing import List, Optional, Any
 
 class FileData(BaseModel):
     name: str
     type: str
-    file: Union[str, bytes]
+    file: Any
 
 class Message(BaseModel):
     content: Optional[str] = None
@@ -14,7 +15,7 @@ class Message(BaseModel):
 
 class ProcessedMessage(BaseModel):
     content: Optional[str] = None
-    images: Optional[List[str]] = None
+    images: Optional[List[dspy.Image]] = None
     context: Optional[List[str]] = None
     recent_conversations: Optional[List[str]] = None
 
