@@ -17,6 +17,8 @@ class UserResponse(BaseModel):
     fullName: str
     email: EmailStr
     phone: str
+    nickname: Optional[str] = None
+    theme: Optional[str] = "light"
 
 class UserUpdateProfile(BaseModel):
     fullName: Optional[str] = None

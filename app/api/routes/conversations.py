@@ -315,7 +315,7 @@ async def stream_message(conversation_id: str,
                         data = line.removeprefix("data: ").strip()
                         if data == "[DONE]":
                             break
-                        final_response += data
+                        final_response += data + " "
                         yield f"data: {data}\n\n"
 
             # Save full response once stream finishes
