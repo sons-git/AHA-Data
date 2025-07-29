@@ -1,0 +1,13 @@
+*.env
+*.env.*
+env.*
+venv/
+.venv/
+*.pyc
+*.yaml
+.dockerignore
+Dockerfile
+__pycache__/
+*.py[cod]
+*$py.class
+*.json
