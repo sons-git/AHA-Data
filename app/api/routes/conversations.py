@@ -1,7 +1,7 @@
-from urllib.request import Request
 import httpx
 import traceback
 from typing import List
+from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import JSONResponse, StreamingResponse
