@@ -3,7 +3,6 @@ from typing import List
 from app.database.redis_client import get_redis_config
 from app.schemas.conversations import ProcessedMessage
 
-# -------------------- Web Search Service Functions --------------------
 api_keys = get_redis_config("api_keys")
 API_KEY = api_keys["SEARCH_API_KEY"] 
 CX = api_keys["SEARCH_CX"] 
@@ -58,6 +57,8 @@ def sanitize_query(query: str) -> str:
     Raises:
         ValueError: If the query is empty or exceeds length constraints.
     """
+    if not query:
+        raise ValueError("Query cannot be empty")
     # Strip leading/trailing whitespace and remove control chars
     query = query.strip().replace("\n", " ").replace("\r", " ")
 
