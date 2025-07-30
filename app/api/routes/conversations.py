@@ -1,3 +1,4 @@
+from urllib.request import Request
 import httpx
 import traceback
 from typing import List
@@ -19,6 +20,8 @@ from app.schemas.conversations import (
     Conversation,
     UpdateConversationRequest,
 )
+from app.services.manage_responses.response_streamer import stream_response
+from app.services.manage_responses.web_search import search
 from app.utils.file_processing import handle_file_processing
 from app.utils.common import build_error_response, classify_message
 
@@ -302,32 +305,57 @@ async def stream_message(conversation_id: str,
         processed_file = await handle_file_processing(message.content, message.files)
         classified_message = await classify_message(processed_file, conversation_id)
         processed_message = jsonable_encoder(classified_message)
-        async def event_generator():
-            """
-            Generator function to stream data as Server-Sent Events (SSE).
-            """
-            final_response = ""
-            async with httpx.AsyncClient(base_url=base_url, timeout=None) as client:
-                async with client.stream("POST", "/api/conversations/stream", json=processed_message, timeout=30.0) as response:
-                    async for line in response.aiter_lines():
-                        if not line or not line.startswith("data: "):
-                            continue
-                        data = line.removeprefix("data: ").strip()
-                        if data == "[DONE]":
-                            break
-                        final_response += data + " "
-                        yield f"data: {data}\n\n"
 
-            # Save full response once stream finishes
-            await save_message(convo_id=conversation_id, message=message, response=final_response)
-            yield "data: [DONE]\n\n"
-
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+        return StreamingResponse(stream_response(conversation_id, message, processed_message), media_type="text/event-stream")
 
     except Exception as e:
         traceback.print_exc()
         return build_error_response(
             "STREAM_INITIALIZATION_FAILED",
             f"Failed to initialize message stream: {str(e)}",
+            500
+        )
+    
+@router.post("/{conversation_id}/web/search")
+async def web_search(conversation_id: str, request: Request):
+    """
+    Perform a web search and return formatted results.
+
+    Args:
+        conversation_id (str): The ID of the conversation.
+        q (str): The search query.
+
+    Returns:
+        JSONResponse: A JSON object containing the search results or an error message.
+    """
+    try:
+        if not conversation_id:
+            return build_error_response(
+                "INVALID_INPUT",
+                "Conversation ID and search query are required",
+                400
+            )
+        
+        body = await request.json()
+        content = None
+        
+        if "content" in body and isinstance(body["content"], str) and body["content"]:
+            content = body.get("content")
+            
+        message = Message(
+            content=content,
+            image=None,
+            timestamp=body.get("timestamp")
+        )
+
+        search_results = await search(message.content)
+        search_results = jsonable_encoder(search_results)
+
+        return StreamingResponse(stream_response(conversation_id, message, search_results), media_type="text/event-stream")
+    
+    except Exception as e:
+        return build_error_response(
+            "WEB_SEARCH_ERROR",
+            f"Web search failed: {str(e)}",
             500
         )
