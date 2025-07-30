@@ -304,9 +304,8 @@ async def stream_message(conversation_id: str,
         # Process files and classify message
         processed_file = await handle_file_processing(message.content, message.files)
         classified_message = await classify_message(processed_file, conversation_id)
-        processed_message = jsonable_encoder(classified_message)
 
-        return StreamingResponse(stream_response(conversation_id, message, processed_message), media_type="text/event-stream")
+        return StreamingResponse(stream_response(conversation_id, message, classified_message), media_type="text/event-stream")
 
     except Exception as e:
         traceback.print_exc()
@@ -349,7 +348,6 @@ async def web_search(conversation_id: str, request: Request):
         )
 
         search_results = await search(message.content)
-        search_results = jsonable_encoder(search_results)
 
         return StreamingResponse(stream_response(conversation_id, message, search_results), media_type="text/event-stream")
     
