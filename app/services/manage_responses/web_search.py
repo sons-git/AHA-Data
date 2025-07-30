@@ -1,31 +1,48 @@
+import httpx
+from typing import List
 from app.database.redis_client import get_redis_config
 from app.schemas.conversations import ProcessedMessage
-from tavily import AsyncTavilyClient
 
 # -------------------- Web Search Service Functions --------------------
 api_keys = get_redis_config("api_keys")
-tavily_client = AsyncTavilyClient(api_key=api_keys["TAVILY_API_KEY"])
+API_KEY = api_keys["SEARCH_API_KEY"] 
+CX = api_keys["SEARCH_CX"] 
 
 async def search(query: str):
-    """    
-    This function sanitizes the query, performs the search, and formats the results.
+    """
+    Perform a Google Custom Search and format the results.
     Args:
         query (str): The search query.
     Returns:
-        list: A list of formatted search results.
+        ProcessedMessage: formatted search results
     Raises:
         ValueError: If the query is empty or exceeds length constraints.
     """
     sanitized_query = sanitize_query(query)
-    search_results = await tavily_client.search(
-        query=sanitized_query,
-        search_depth="advanced",
-        max_results=5
-    )
+
+    url = "https://www.googleapis.com/customsearch/v1"
+    params = {
+        "key": API_KEY,
+        "cx": CX,
+        "q": sanitized_query,
+        "num": 5   # limit results
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+
+    items = data.get("items", [])
+
+    formatted_results: List[str] = [
+        f"{item.get('title')}: {item.get('snippet')} ({item.get('link')})"
+        for item in items
+    ]
 
     return ProcessedMessage(
         content=query,
-        context=[f"{result['title']}: {result['content']} ({result['url']})" for result in search_results["results"]],
+        context=formatted_results,
         images=None,
         recent_conversations=None
     )
