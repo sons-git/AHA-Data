@@ -120,7 +120,10 @@ async def convert_images_concurrent(files: List[FileData]) -> List[dspy.Image]:
     for file_data in files:
         try:
             if isinstance(file_data.file, (bytes, bytearray)):
-                base64_data = base64.b64encode(file_data.file).decode("utf-8")
+                if is_base64_encoded(file_data.file):
+                    base64_data = file_data.file.decode("utf-8")
+                else:
+                    base64_data = base64.b64encode(file_data.file).decode("utf-8")
                 tasks.append(convert_to_dspy_image(base64_data))
         except Exception as e:
             print(f"Failed to prepare image {file_data.name}: {e}")
