@@ -33,7 +33,7 @@ def process_filedata_with_diarization(file_data: FileData) -> Dict[str, Any]:
         file_data (FileData): Uploaded file containing audio bytes and metadata.
     
     Returns:
-        Tuple[Any, AudioSegment]: Diarization result object and speech-only audio.
+        Dict[str, Any]: A dictionary containing the diarization result and the base64-encoded speech-only audio.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     temp_audio_path = None
