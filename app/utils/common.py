@@ -9,6 +9,8 @@ from app.schemas.conversations import ProcessedMessage
 from app.services.manage_models.model_manager import model_manager
 from app.utils.text_processing.reciprocal_rank_fusion import rrf
 
+_classifier_cache = None
+
 # Helper function to build a standardized JSON error response
 def build_error_response(code: str, message: str, status: int) -> JSONResponse:
     """
@@ -100,8 +102,10 @@ async def get_classifier() -> dspy.Module:
         Exception: If the classifier model cannot be loaded.
     """
     try:
-        classifier = model_manager.get_model("classifier")
-        return classifier
+        global _classifier_cache
+        if _classifier_cache is None:
+            _classifier_cache = model_manager.get_model("classifier")
+        return _classifier_cache
     except Exception as e:
         print(f"Failed to load classifier: {str(e)}")
         raise Exception(f"Classifier loading failed: {str(e)}")
