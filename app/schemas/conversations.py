@@ -1,8 +1,11 @@
 import dspy
 from datetime import datetime
-from pydub import AudioSegment
 from pydantic import BaseModel, Field
-from typing import List, Optional, Any, Tuple
+from typing import List, Optional, Any, Dict, Union
+
+class DiarizedAudio(BaseModel):
+    diarization: List[Dict[str, Union[str, float]]]
+    speech_audio_base64: str
 
 class FileData(BaseModel):
     name: str
@@ -20,11 +23,7 @@ class ProcessedMessage(BaseModel):
     context: Optional[List[str]] = None
     recent_conversations: Optional[List[str]] = None
     files: Optional[List[str]] = None
-    audio: Optional[List[str]] = None
-    # audio: Optional[List[Tuple[Any, AudioSegment]]] = None
-    
-    class Config:
-        arbitrary_types_allowed = True
+    audio: Optional[List[DiarizedAudio]] = None
 
 class WebSearchResponse(BaseModel):
     content: str

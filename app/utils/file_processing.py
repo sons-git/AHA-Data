@@ -9,6 +9,7 @@ from typing import List, Tuple, Optional
 import dspy
 from app.schemas.conversations import FileData, ProcessedMessage
 from app.utils.image_processing import convert_to_dspy_image
+from .audio_processing import process_filedata_with_diarization
 
 async def extract_text(file_data: FileData) -> Optional[str]:
     """
@@ -163,16 +164,36 @@ async def handle_file_processing(content: str, files: List[FileData]) -> Process
     
     extracted_texts = []
     dspy_images = []
+    extracted_audio = []
 
     # Classify files into images and documents
-    image_files, doc_files, audio_files = await classify_file(files)
+    image_files, doc_files, audio_files = classify_file(files)
 
-    # Run text extraction & image conversion concurrently
-    extracted_texts, dspy_images = await asyncio.gather(
-        extract_text_concurrent(doc_files),
-        convert_images_concurrent(image_files)
-    )
+    for file_data in audio_files:
+        audio = process_filedata_with_diarization(file_data)
+        if audio:
+            extracted_audio.append(audio)
+    
+    # Extract text from document files
+    for file_data in doc_files:
+        text = extract_text(file_data)
+        if text:
+            extracted_texts.append(text)
 
+    # Convert image files to dspy.Image objects
+    for file_data in image_files:
+        try:
+            if isinstance(file_data.file, (bytes, bytearray)):
+                base64_data = base64.b64encode(file_data.file).decode("utf-8")
+            else:
+                print(f"Unsupported file type for image {file_data.name}")
+                continue
+
+            dspy_image = await convert_to_dspy_image(base64_data)
+            dspy_images.append(dspy_image)
+        except Exception as e:
+            print(f"Failed to convert image {file_data.name}: {e}")
+            
     # Combine original content with extracted text
     combined_content = "\n\n".join(filter(None, [content] + extracted_texts))
     return ProcessedMessage(
@@ -181,6 +202,5 @@ async def handle_file_processing(content: str, files: List[FileData]) -> Process
         context=None,
         recent_conversations=None,
         files=extracted_texts,
-        audio=None
-
+        audio=extracted_audio
     )
