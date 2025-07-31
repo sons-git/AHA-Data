@@ -12,7 +12,6 @@ from app.database.mongo_client import (
     get_conversation_by_id,
     delete_conversation_by_id,
     update_conversation_title,
-    save_message,
 )
 from app.schemas.conversations import (
     FileData,
@@ -346,6 +345,13 @@ async def web_search(conversation_id: str, request: Request):
             image=None,
             timestamp=body.get("timestamp")
         )
+
+        if not message or not message.content:
+            return build_error_response(
+                "INVALID_INPUT",
+                "Search query cannot be empty",
+                400
+            )
 
         search_results = await search(message.content)
 
