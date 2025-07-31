@@ -12,6 +12,8 @@ from app.database.mongo_client import (
     delete_conversation_by_id,
     update_conversation_title,
 )
+from app.schemas.audio import Audio, Text
+from app.utils.text_processing.text_cleaning import clean_text_for_speech
 from app.schemas.conversations import (
     FileData,
     Message,
@@ -375,5 +377,84 @@ async def web_search(conversation_id: str, content: str = Form(None), timestamp:
         return build_error_response(
             "WEB_SEARCH_ERROR",
             f"Web search failed: {str(e)}",
+            500
+        )
+
+@router.post("/speech_to_text")
+async def speech_to_text(request: Audio):
+    """
+    Transcribe the given audio file using Faster-Whisper.
+
+    Args:
+        request (Audio): Request containing base64-encoded audio data.
+
+    Returns:
+        str: The transcribed text from the audio file.
+    """
+    try:
+        async with httpx.AsyncClient(base_url=base_url) as client:
+            response = await client.post(
+                "/api/conversations/speech_to_text",
+                json=request.dict(),
+                timeout=30.0
+            )
+            response.raise_for_status()
+
+        transcription = response.json()
+        return transcription
+    
+    except Exception as e:
+        traceback.print_exc()
+        return build_error_response(
+            "TRANSCRIPTION_FAILED",
+            f"Failed to transcribe audio: {str(e)}",
+            500
+        )
+    
+@router.post("/{conversation_id}/text_to_speech")
+async def text_to_speech(input: Text):
+    """
+    Transcribe the given audio file using Faster-Whisper.
+
+    Args:
+        request (Audio): Request containing base64-encoded audio data.
+
+    Returns:
+        str: The transcribed text from the audio file.
+    """
+    try:
+        if not input or not input.text:
+            return build_error_response(
+                "INVALID_INPUT",
+                "Input text is required",
+                400
+            )
+
+        input.text = await clean_text_for_speech(input.text)
+        
+        async with httpx.AsyncClient(base_url=base_url) as client:
+            response = await client.post(
+                "/api/conversations/text_to_speech",
+                json=input.dict(),
+                timeout=30.0
+            )
+            response.raise_for_status()
+
+        return StreamingResponse(
+            response.aiter_bytes(),
+            media_type="audio/mpeg",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Cache-Control"
+            }
+        )
+
+    except Exception as e:
+        traceback.print_exc()
+        return build_error_response(
+            "TEXT_TO_SPEECH_FAILED",
+            f"Failed to convert text to speech: {str(e)}",
             500
         )
