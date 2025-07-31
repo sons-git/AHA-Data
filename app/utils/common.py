@@ -183,5 +183,5 @@ async def classify_message(processed_message: ProcessedMessage, convo_id: str) -
     
     # Update recent conversations
     processed_message.recent_conversations = recent_conversations
-    
+
     return processed_message

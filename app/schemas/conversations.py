@@ -1,7 +1,8 @@
 import dspy
 from datetime import datetime
+from pydub import AudioSegment
 from pydantic import BaseModel, Field
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Tuple
 
 class FileData(BaseModel):
     name: str
@@ -18,6 +19,12 @@ class ProcessedMessage(BaseModel):
     images: Optional[List[dspy.Image]] = None
     context: Optional[List[str]] = None
     recent_conversations: Optional[List[str]] = None
+    files: Optional[List[str]] = None
+    audio: Optional[List[str]] = None
+    # audio: Optional[List[Tuple[Any, AudioSegment]]] = None
+    
+    class Config:
+        arbitrary_types_allowed = True
 
 class WebSearchResponse(BaseModel):
     content: str

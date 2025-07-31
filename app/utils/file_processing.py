@@ -80,7 +80,8 @@ def classify_file(files: List[FileData]) -> Tuple[List[FileData], List[FileData]
     # Separate image files and document files by MIME type
     image_files = [f for f in files if f.type.startswith("image/")]
     doc_files = [f for f in files if f.type.startswith(("text/", "application/"))]
-    return image_files, doc_files
+    audio_files = [f for f in files if f.type.startswith("audio/")]
+    return image_files, doc_files, audio_files
 
 async def handle_file_processing(content: str, files: List[FileData]) -> ProcessedMessage:
     """
@@ -101,9 +102,12 @@ async def handle_file_processing(content: str, files: List[FileData]) -> Process
             content=content,
             images=None,
             context=None,
-            recent_conversations=None
+            recent_conversations=None,
+            files=None,
+            audio=None
         )
     extracted_texts = []
+    extracted_audio = []
     dspy_images = []
 
     # Classify files into images and documents
@@ -130,10 +134,11 @@ async def handle_file_processing(content: str, files: List[FileData]) -> Process
             print(f"Failed to convert image {file_data.name}: {e}")
 
     # Combine original content with extracted text
-    combined_content = "\n\n".join(filter(None, [content] + extracted_texts))
     return ProcessedMessage(
-        content=combined_content,
+        content=content,
         images=dspy_images,
         context=None,
-        recent_conversations=None
+        recent_conversations=None,
+        files=extracted_texts,
+        audio=None
     )

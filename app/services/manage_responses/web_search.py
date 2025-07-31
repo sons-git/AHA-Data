@@ -40,11 +40,13 @@ async def search(query: str):
     ]
 
     return ProcessedMessage(
-        content=query,
+        content=query, # thử lại phát
         context=formatted_results,
         images=None,
-        recent_conversations=None
-    )
+        recent_conversations=None,
+        files=None,
+        audio=None 
+    ) 
 
 
 def sanitize_query(query: str) -> str:
