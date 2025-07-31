@@ -1,7 +1,6 @@
 import httpx
 import traceback
 from typing import List
-from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -317,7 +316,7 @@ async def stream_message(conversation_id: str,
         # Process files and classify message
         processed_file = await handle_file_processing(message.content, message.files)
         classified_message = await classify_message(processed_file, conversation_id)
-        
+
         return StreamingResponse(stream_response(conversation_id, message, classified_message), media_type="text/event-stream")
 
     except Exception as e:
@@ -329,7 +328,7 @@ async def stream_message(conversation_id: str,
         )
     
 @router.post("/{conversation_id}/web/search")
-async def web_search(conversation_id: str, request: Request):
+async def web_search(conversation_id: str, content: str = Form(None), timestamp: str = Form(None)):
     """
     Perform a web search and return formatted results.
 
@@ -347,14 +346,11 @@ async def web_search(conversation_id: str, request: Request):
                 "Conversation ID and search query are required",
                 400
             )
-        
-        body = await request.json()
-        content = body.get("content") if "content" in body and isinstance(body["content"], str) and body["content"] else None
-        
+
         message = Message(
             content=content,
             image=None,
-            timestamp=body.get("timestamp")
+            timestamp=timestamp
         )
 
         if not message.content:
@@ -370,7 +366,7 @@ async def web_search(conversation_id: str, request: Request):
                 400
             )
 
-        search_results = await search(message.content)
+        search_results = await search(content)
 
         return StreamingResponse(stream_response(conversation_id, message, search_results), media_type="text/event-stream")
     
