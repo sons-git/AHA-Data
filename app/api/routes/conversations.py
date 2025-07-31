@@ -29,7 +29,12 @@ router = APIRouter(prefix="/api/conversations", tags=["Conversations"])
 
 
 @router.post("/create/{user_id}", response_model=Conversation)
-async def create_conversation_by_user_id(user_id: str, message: Message):
+async def create_conversation_by_user_id(
+    user_id: str, 
+    content: str = Form(None),
+    files: List[UploadFile] = File(default=[])
+    ):
+
     """
     Create a new conversation for a given user.
 
@@ -43,15 +48,25 @@ async def create_conversation_by_user_id(user_id: str, message: Message):
         if not user_id:
             return build_error_response("INVALID_INPUT", "User ID is required", 400)
 
+        # Convert UploadFile to FileData
+        file_data_list = []
+        for upload in files:
+            file_bytes = await upload.read()
+            file_data_list.append(FileData(
+                name=upload.filename,
+                type=upload.content_type,
+                file=file_bytes
+            ))
+
         # Process files and generate conversation title
-        processed_file = await handle_file_processing(message.content, message.files)
+        processed_file = await handle_file_processing(content, file_data_list)
         processed_message = jsonable_encoder(processed_file)
 
         async with httpx.AsyncClient(base_url=base_url) as client:
             title_response = await client.post(
                 "/api/conversations/generate_title",
                 json=processed_message,
-                timeout=30.0
+                timeout=60.0
             )
 
             if title_response.status_code != 200:
@@ -308,7 +323,7 @@ async def stream_message(conversation_id: str,
             """
             final_response = ""
             async with httpx.AsyncClient(base_url=base_url, timeout=None) as client:
-                async with client.stream("POST", "/api/conversations/stream", json=processed_message, timeout=30.0) as response:
+                async with client.stream("POST", "/api/conversations/stream", json=processed_message, timeout=60.0) as response:
                     async for line in response.aiter_lines():
                         if not line or not line.startswith("data: "):
                             continue

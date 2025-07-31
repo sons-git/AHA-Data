@@ -7,7 +7,7 @@ from typing import List, Tuple, Optional
 from app.schemas.conversations import FileData, ProcessedMessage
 from app.utils.image_processing import convert_to_dspy_image
 
-def extract_text(file_data: FileData) -> Optional[str]:
+async def extract_text(file_data: FileData) -> Optional[str]:
     """
     Extract text content from various file types based on FileData.file.
 
@@ -67,7 +67,7 @@ def extract_text(file_data: FileData) -> Optional[str]:
         print(f"Failed to extract text from {file_data.name}: {e}")
         return None
 
-def classify_file(files: List[FileData]) -> Tuple[List[FileData], List[FileData]]:
+async def classify_file(files: List[FileData]) -> Tuple[List[FileData], List[FileData]]:
     """
     Classify files into images and documents based on their MIME types.
 
@@ -107,11 +107,11 @@ async def handle_file_processing(content: str, files: List[FileData]) -> Process
     dspy_images = []
 
     # Classify files into images and documents
-    image_files, doc_files = classify_file(files)
+    image_files, doc_files = await classify_file(files)
 
     # Extract text from document files
     for file_data in doc_files:
-        text = extract_text(file_data)
+        text = await extract_text(file_data)
         if text:
             extracted_texts.append(text)
 
