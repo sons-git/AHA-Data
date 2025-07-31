@@ -11,7 +11,7 @@ gcs_key_data = get_redis_config("gcs-service-key")
 credentials = service_account.Credentials.from_service_account_info(gcs_key_data)
 BUCKET_NAME = get_redis_config("api_keys")["BUCKET_NAME"]
 
-def upload_file_to_gcs(convo_id: str, file_data: FileData) -> str:
+async def upload_file_to_gcs(convo_id: str, file_data: FileData) -> str:
     """
     Uploads a file (base64 string or bytes) to Google Cloud Storage and returns its GCS URL.
 
@@ -67,7 +67,7 @@ def upload_file_to_gcs(convo_id: str, file_data: FileData) -> str:
     # Return the public GCS URL of the uploaded file
     return f"https://storage.cloud.google.com/{BUCKET_NAME}/{unique_filename}"
 
-def delete_files_from_gcs(convo_id: str) -> None:
+async def delete_files_from_gcs(convo_id: str) -> None:
     """
     Deletes all files related to a conversation from Google Cloud Storage.
 
