@@ -352,6 +352,7 @@ async def web_search(conversation_id: str, request: Request):
         return StreamingResponse(stream_response(conversation_id, message, search_results), media_type="text/event-stream")
     
     except Exception as e:
+        traceback.print_exc()
         return build_error_response(
             "WEB_SEARCH_ERROR",
             f"Web search failed: {str(e)}",

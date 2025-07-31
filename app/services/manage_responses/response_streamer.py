@@ -9,6 +9,12 @@ base_url = "http://localhost:8001"
 async def stream_response(conversation_id: str, message: Message, processed_message: ProcessedMessage):
     """
     Generator function to stream data as Server-Sent Events (SSE).
+    Args:
+        conversation_id (str): The ID of the conversation.
+        message (Message): The original message object.
+        processed_message (ProcessedMessage): The processed message to stream.
+    Yields:
+        str: The streamed data in SSE format.
     """
     final_response = ""
     json_message = jsonable_encoder(processed_message)
