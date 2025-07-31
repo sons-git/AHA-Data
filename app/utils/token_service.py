@@ -61,14 +61,14 @@ async def verify_reset_token(token: str) -> Optional[str]:
             "used": False
         })
         
-        print(f"DEBUG: Token found: {token_doc is not None}")  # Debug log
+        # Debug log removed: print(f"DEBUG: Token found: {token_doc is not None}")
         
         if not token_doc:
             print("Token not found or already used")
             return None
             
-        print(f"DEBUG: Token expires at: {token_doc['expires_at']}")  # Debug log
-        print(f"DEBUG: Current time: {datetime.utcnow()}")  # Debug log
+        # Debug log removed: print(f"DEBUG: Token expires at: {token_doc['expires_at']}")
+        # Debug log removed: print(f"DEBUG: Current time: {datetime.utcnow()}")
             
         # Check if token has expired
         if datetime.utcnow() > token_doc["expires_at"]:
