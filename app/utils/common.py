@@ -125,10 +125,10 @@ async def classify_text(processed_message: ProcessedMessage = None) -> str:
         Exception: If translation, classification, or either task fails.
     """
     try:
-        async with Translator() as translator:
-            translate_task = translator.translate(
-                text=processed_message.content, src="auto", dest="en"
-            )
+        translator = Translator()
+        translate_task = translator.translate(
+            text=processed_message.content, src="auto", dest="en"
+        )
             classifier_task = get_classifier()
             start_time = time.time()
             translated_prompt, classifier = await asyncio.gather(
