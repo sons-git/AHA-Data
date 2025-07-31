@@ -107,10 +107,6 @@ async def extract_text_concurrent(files: List[FileData]) -> List[str]:
             extracted.append(r)
     return extracted
 
-def is_base64_encoded(data):
-    raise NotImplementedError
-
-
 async def convert_images_concurrent(files: List[FileData]) -> List[dspy.Image]:
     """
     Convert image files to dspy.Image objects concurrently. 
@@ -167,32 +163,13 @@ async def handle_file_processing(content: str, files: List[FileData]) -> Process
     extracted_audio = []
 
     # Classify files into images and documents
-    image_files, doc_files, audio_files = classify_file(files)
-
-    for file_data in audio_files:
-        audio = process_filedata_with_diarization(file_data)
-        if audio:
-            extracted_audio.append(audio)
+    image_files, doc_files, audio_files = await classify_file(files)
     
-    # Extract text from document files
-    for file_data in doc_files:
-        text = extract_text(file_data)
-        if text:
-            extracted_texts.append(text)
-
-    # Convert image files to dspy.Image objects
-    for file_data in image_files:
-        try:
-            if isinstance(file_data.file, (bytes, bytearray)):
-                base64_data = base64.b64encode(file_data.file).decode("utf-8")
-            else:
-                print(f"Unsupported file type for image {file_data.name}")
-                continue
-
-            dspy_image = await convert_to_dspy_image(base64_data)
-            dspy_images.append(dspy_image)
-        except Exception as e:
-            print(f"Failed to convert image {file_data.name}: {e}")
+    extracted_texts, dspy_images, extracted_audio = await asyncio.gather(
+        extract_text_concurrent(doc_files),
+        convert_images_concurrent(image_files),
+        asyncio.gather(*[asyncio.to_thread(process_filedata_with_diarization, f) for f in audio_files])
+    )
             
     # Combine original content with extracted text
     combined_content = "\n\n".join(filter(None, [content] + extracted_texts))

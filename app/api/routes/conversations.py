@@ -66,7 +66,7 @@ async def create_conversation_by_user_id(
             title_response = await client.post(
                 "/api/conversations/generate_title",
                 json=processed_message,
-                timeout=60.0
+                timeout=120.0
             )
 
             if title_response.status_code != 200:
