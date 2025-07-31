@@ -41,7 +41,6 @@ def rrf(
             for doc_id in all_doc_ids
         }
 
-        import heapq
         if n_points and n_points < len(rrf_scores):
             top_doc_ids = [doc_id for doc_id, _ in heapq.nlargest(n_points, rrf_scores.items(), key=lambda x: x[1])]
         else:
