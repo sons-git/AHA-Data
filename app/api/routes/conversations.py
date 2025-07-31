@@ -343,6 +343,12 @@ async def web_search(conversation_id: str, request: Request):
             timestamp=body.get("timestamp")
         )
 
+        if not message.content:
+            return build_error_response(
+                "INVALID_INPUT",
+                "Message content is required for web search",
+                400
+            )
         if not message or not message.content:
             return build_error_response(
                 "INVALID_INPUT",
