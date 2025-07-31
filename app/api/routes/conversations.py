@@ -335,11 +335,8 @@ async def web_search(conversation_id: str, request: Request):
             )
         
         body = await request.json()
-        content = None
+        content = body.get("content") if "content" in body and isinstance(body["content"], str) and body["content"] else None
         
-        if "content" in body and isinstance(body["content"], str) and body["content"]:
-            content = body.get("content")
-            
         message = Message(
             content=content,
             image=None,
