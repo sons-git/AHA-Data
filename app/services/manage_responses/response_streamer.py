@@ -12,7 +12,7 @@ async def stream_response(conversation_id: str, message: Message, processed_mess
         final_response = ""
         
         async with httpx.AsyncClient(base_url=base_url, timeout=None) as client:
-            async with client.stream("POST", "/api/conversations/stream", json=jsonable_encoder(processed_message), timeout=30.0) as response:
+            async with client.stream("POST", "/api/conversations/stream", json=jsonable_encoder(processed_message), timeout=60.0) as response:
                 if response.status_code != 200:
                     yield f"data: ERROR - Backend error: {response.status_code}\n\n"
                     return

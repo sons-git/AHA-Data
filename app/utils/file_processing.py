@@ -1,13 +1,16 @@
+import asyncio
 import csv
 import io
 import base64
 from docx import Document
 from PyPDF2 import PdfReader
 from typing import List, Tuple, Optional
+
+import dspy
 from app.schemas.conversations import FileData, ProcessedMessage
 from app.utils.image_processing import convert_to_dspy_image
 
-def extract_text(file_data: FileData) -> Optional[str]:
+async def extract_text(file_data: FileData) -> Optional[str]:
     """
     Extract text content from various file types based on FileData.file.
 
@@ -67,7 +70,7 @@ def extract_text(file_data: FileData) -> Optional[str]:
         print(f"Failed to extract text from {file_data.name}: {e}")
         return None
 
-def classify_file(files: List[FileData]) -> Tuple[List[FileData], List[FileData]]:
+async def classify_file(files: List[FileData]) -> Tuple[List[FileData], List[FileData], List[FileData]]:
     """
     Classify files into images and documents based on their MIME types.
 
@@ -82,6 +85,57 @@ def classify_file(files: List[FileData]) -> Tuple[List[FileData], List[FileData]
     doc_files = [f for f in files if f.type.startswith(("text/", "application/"))]
     audio_files = [f for f in files if f.type.startswith("audio/")]
     return image_files, doc_files, audio_files
+
+async def extract_text_concurrent(files: List[FileData]) -> List[str]:
+    """
+    Extract text from multiple files concurrently.
+    Args:
+        files (List[FileData]): List of FileData objects containing file data.
+    Returns:
+        List[str]: List of extracted text strings from the provided files.
+    Raises:
+        Exception: If any file extraction fails.
+    """
+    tasks = [extract_text(file_data) for file_data in files]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    extracted = []
+    for idx, r in enumerate(results):
+        if isinstance(r, Exception):
+            print(f"Failed to extract text from file at index {idx}: {r}")
+        elif isinstance(r, str) and r.strip():
+            extracted.append(r)
+    return extracted
+
+def is_base64_encoded(data):
+    raise NotImplementedError
+
+
+async def convert_images_concurrent(files: List[FileData]) -> List[dspy.Image]:
+    """
+    Convert image files to dspy.Image objects concurrently. 
+    Args:
+        files (List[FileData]): List of FileData objects containing image data.
+    Returns:
+        List[dspy.Image]: List of dspy.Image objects created from the provided files.
+    Raises:
+        Exception: If any file conversion fails.
+    """
+    tasks = []
+    for file_data in files:
+        try:
+            if isinstance(file_data.file, (bytes, bytearray)):
+                base64_data = base64.b64encode(file_data.file).decode("utf-8")
+                tasks.append(convert_to_dspy_image(base64_data))
+        except Exception as e:
+            print(f"Failed to prepare image {file_data.name}: {e}")
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    images = []
+    for idx, r in enumerate(results):
+        if isinstance(r, Exception):
+            print(f"Failed to convert image file at index {idx}: {r}")
+        else:
+            images.append(r)
+    return images
 
 async def handle_file_processing(content: str, files: List[FileData]) -> ProcessedMessage:
     """
@@ -106,39 +160,27 @@ async def handle_file_processing(content: str, files: List[FileData]) -> Process
             files=None,
             audio=None
         )
+    
     extracted_texts = []
-    extracted_audio = []
     dspy_images = []
 
     # Classify files into images and documents
-    image_files, doc_files = classify_file(files)
+    image_files, doc_files, audio_files = await classify_file(files)
 
-    # Extract text from document files
-    for file_data in doc_files:
-        text = extract_text(file_data)
-        if text:
-            extracted_texts.append(text)
-
-    # Convert image files to dspy.Image objects
-    for file_data in image_files:
-        try:
-            if isinstance(file_data.file, (bytes, bytearray)):
-                base64_data = base64.b64encode(file_data.file).decode("utf-8")
-            else:
-                print(f"Unsupported file type for image {file_data.name}")
-                continue
-
-            dspy_image = await convert_to_dspy_image(base64_data)
-            dspy_images.append(dspy_image)
-        except Exception as e:
-            print(f"Failed to convert image {file_data.name}: {e}")
+    # Run text extraction & image conversion concurrently
+    extracted_texts, dspy_images = await asyncio.gather(
+        extract_text_concurrent(doc_files),
+        convert_images_concurrent(image_files)
+    )
 
     # Combine original content with extracted text
+    combined_content = "\n\n".join(filter(None, [content] + extracted_texts))
     return ProcessedMessage(
-        content=content,
+        content=combined_content,
         images=dspy_images,
         context=None,
         recent_conversations=None,
         files=extracted_texts,
         audio=None
+
     )
