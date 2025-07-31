@@ -89,7 +89,7 @@ async def compute_sparse_vector(text: str = None) -> Tuple[List[int], List[float
     indices = torch.nonzero(vec, as_tuple=True)[0].tolist()
 
     if isinstance(indices, int):  # if single int, convert to list
-            indices = [indices]
+        indices = [indices]
 
     # Safely get corresponding values
     values = vec[indices].tolist() if indices else []
