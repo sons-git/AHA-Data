@@ -412,17 +412,24 @@ async def speech_to_text(request: Audio):
         )
     
 @router.post("/{conversation_id}/text_to_speech")
-async def text_to_speech(input: Text):
+async def text_to_speech(conversation_id: str, input: Text):
     """
-    Transcribe the given audio file using Faster-Whisper.
+    Convert text to speech for a specific conversation.
 
     Args:
-        request (Audio): Request containing base64-encoded audio data.
+        conversation_id (str): The ID of the conversation.
+        input (Text): Input text to be converted to speech.
 
     Returns:
-        str: The transcribed text from the audio file.
+        StreamingResponse: The audio stream of the converted text.
     """
     try:
+        if not conversation_id:
+            return build_error_response(
+                "INVALID_INPUT",
+                "Conversation ID is required",
+                400
+            )
         if not input or not input.text:
             return build_error_response(
                 "INVALID_INPUT",
