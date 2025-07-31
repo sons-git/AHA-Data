@@ -63,8 +63,6 @@ def sanitize_query(query: str) -> str:
     query = query.strip().replace("\n", " ").replace("\r", " ")
 
     # Enforce length constraints
-    if len(query) < 1:
-        raise ValueError("Query must be at least 1 character long")
     if len(query) > 400:
         query = query[:400]
 
