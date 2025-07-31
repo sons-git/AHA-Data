@@ -6,7 +6,7 @@ from io import BytesIO
 from pydub import AudioSegment
 from typing import Any, Dict, List
 from pyannote.audio import Pipeline
-from matplotlib.text import Annotation
+from pyannote.core import Annotation
 from app.schemas.conversations import FileData
 from app.database.redis_client import get_redis_config
 
