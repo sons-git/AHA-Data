@@ -53,7 +53,7 @@ async def verify_reset_token(token: str) -> Optional[str]:
     try:
         reset_tokens_collection = db.reset_tokens
         
-        print(f"DEBUG: Looking for token: {token}")  # Debug log
+        print("DEBUG: Searching for reset token in the database")  # Debug log
         
         # Find the token (ASYNC)
         token_doc = await reset_tokens_collection.find_one({
