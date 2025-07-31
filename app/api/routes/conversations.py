@@ -22,7 +22,8 @@ from app.schemas.conversations import (
 from app.utils.file_processing import handle_file_processing
 from app.utils.common import build_error_response, classify_message
 
-base_url = "http://localhost:8001"
+import os
+base_url = os.getenv("BASE_URL", "http://localhost:8001")
 
 # Create a router with a common prefix and tag for all conversation-related endpoints
 router = APIRouter(prefix="/api/conversations", tags=["Conversations"])
