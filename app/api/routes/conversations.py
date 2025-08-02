@@ -4,6 +4,7 @@ from typing import List
 from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, UploadFile, File, Form
+from app.database.redis_client import get_redis_config
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.database.mongo_client import (
@@ -24,7 +25,7 @@ from app.services.manage_responses.web_search import search
 from app.utils.file_processing import handle_file_processing
 from app.utils.common import build_error_response, classify_message
 
-base_url = "http://localhost:8001"
+base_url = get_redis_config("api_keys")["BACKEND_URL"]
 
 # Create a router with a common prefix and tag for all conversation-related endpoints
 router = APIRouter(prefix="/api/conversations", tags=["Conversations"])

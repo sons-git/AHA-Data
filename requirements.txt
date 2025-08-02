@@ -13,18 +13,20 @@ PyPDF2==3.0.1
 python-docx==1.2.0
 googletrans==4.0.2
 
-# Embedding & Vector Stores
-sentence_transformers==5.0.0
-transformers==4.53.1
-
 # Databases
 google-cloud-storage==3.2.0
 qdrant_client==1.14.3
-pymongo==4.13.2
 redis==6.2.0
 bcrypt==4.3.0
+motor==3.7.1
+email-validator==2.2.0
+python-multipart==0.0.20
 
 # LLM Ecosystem
 dspy==2.6.27
 pydub==0.25.1
+
+# ML
+sentence_transformers==5.0.0
+transformers==4.53.1
 pyannote.audio

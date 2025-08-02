@@ -1,14 +1,12 @@
 import os
-import torch
 import base64
 import tempfile
 from io import BytesIO
 from pydub import AudioSegment
 from typing import Any, Dict, List
-from pyannote.audio import Pipeline
 from matplotlib.text import Annotation
 from app.schemas.conversations import FileData
-from app.database.redis_client import get_redis_config
+from app.services.manage_models.model_manager import model_manager
 
 def annotation_to_segments(annotation: Annotation) -> List[Dict[str, Any]]:
     return [
@@ -35,7 +33,6 @@ def process_filedata_with_diarization(file_data: FileData) -> Dict[str, Any]:
     Returns:
         Tuple[Any, AudioSegment]: Diarization result object and speech-only audio.
     """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     temp_audio_path = None
     temp_speech_path = None
 
@@ -46,15 +43,9 @@ def process_filedata_with_diarization(file_data: FileData) -> Dict[str, Any]:
             tmp_audio_file.write(file_data.file)
 
         # Load pipelines
-        vad_pipeline = Pipeline.from_pretrained(
-            "pyannote/voice-activity-detection",
-            use_auth_token=get_redis_config("api_keys")["HF_AUTH_TOKEN"]
-        ).to(device)
+        vad_pipeline = model_manager.get_model("voice-activity-detection")
 
-        diarization_pipeline = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization-3.1",
-            use_auth_token=get_redis_config("api_keys")["HF_AUTH_TOKEN"]
-        ).to(device)
+        diarization_pipeline = model_manager.get_model("speaker-diarization")
 
         # Load and preprocess original audio
         audio = AudioSegment.from_wav(temp_audio_path).set_frame_rate(16000)
