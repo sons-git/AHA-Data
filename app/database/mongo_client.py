@@ -2,7 +2,6 @@ import bcrypt
 from typing import Dict
 from bson import ObjectId
 from datetime import datetime
-from pymongo import MongoClient
 from fastapi import HTTPException
 from app.schemas.conversations import Message
 from motor.motor_asyncio import AsyncIOMotorClient

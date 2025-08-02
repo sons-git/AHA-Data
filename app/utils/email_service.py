@@ -1,16 +1,15 @@
 import smtplib
-import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Optional
+from app.database.redis_client import get_redis_config
 
 # Email configuration - set these in your environment variables
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME")  # Your email
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")  # Your app password
-FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USERNAME)
-FROM_NAME = os.getenv("FROM_NAME", "Your App Name")
+SMTP_SERVER = get_redis_config("api_keys")["SMTP_SERVER"]
+SMTP_PORT = get_redis_config("api_keys")["SMTP_PORT"]
+SMTP_USERNAME = get_redis_config("api_keys")["SMTP_USERNAME"]
+SMTP_PASSWORD = get_redis_config("api_keys")["SMTP_PASSWORD"]
+FROM_EMAIL = get_redis_config("api_keys")["FROM_EMAIL"]
+FROM_NAME = get_redis_config("api_keys")["FROM_NAME"]
 
 def send_password_reset_email(email: str, reset_link: str, user_name: str) -> bool:
     """

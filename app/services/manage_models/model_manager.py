@@ -1,9 +1,11 @@
+import torch
 from typing import Any, Dict
 from app.models import Classifier
 from app.utils import (
     get_dense_embedder,
     get_sparse_embedder_and_tokenizer,
 )
+from pyannote.audio import Pipeline
 from app.database.redis_client import get_redis_config
 
 class ModelManager:
@@ -23,16 +25,22 @@ class ModelManager:
 
         After successful execution, all models are stored in `self.models`.
         """
-        print("Loading models...")
-        
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         # Initialize LLM models
         self.models["classifier"] = Classifier(config=get_redis_config("task_classifier"))
+        self.models["voice-activity-detection"] = Pipeline.from_pretrained(
+            "pyannote/voice-activity-detection",
+            use_auth_token=get_redis_config("api_keys")["HF_AUTH_TOKEN"]
+        ).to(device)
+        self.models["speaker-diarization"] = Pipeline.from_pretrained(
+            "pyannote/speaker-diarization-3.1",
+            use_auth_token=get_redis_config("api_keys")["HF_AUTH_TOKEN"]
+        ).to(device)
         
         # Load embedding models
         self.models["dense_embedder"] = get_dense_embedder()
         self.models["sparse_tokenizer"], self.models["sparse_embedder"] = get_sparse_embedder_and_tokenizer()
-        
-        print("All models loaded successfully!")
     
     def get_model(self, model_name: str) -> Any:
         """

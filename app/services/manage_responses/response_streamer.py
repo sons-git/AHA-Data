@@ -1,17 +1,17 @@
 import json
 import httpx
+from app.database.redis_client import get_redis_config
 from fastapi.encoders import jsonable_encoder
 from app.database.mongo_client import save_message
 from app.schemas.conversations import Message, ProcessedMessage
 
-
-base_url = "http://localhost:8001"
+BACKEND_URL = get_redis_config("api_keys")["BACKEND_URL"]
     
 async def stream_response(conversation_id: str, message: Message, processed_message: ProcessedMessage):
         """Stream data and get properly formatted final response"""
         final_response = ""
         
-        async with httpx.AsyncClient(base_url=base_url, timeout=None) as client:
+        async with httpx.AsyncClient(base_url=BACKEND_URL, timeout=None) as client:
             async with client.stream("POST", "/api/conversations/stream", json=jsonable_encoder(processed_message), timeout=300.0) as response:
                 if response.status_code != 200:
                     yield f"data: ERROR - Backend error: {response.status_code}\n\n"

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from app.utils.common import build_error_response
 from app.database.mongo_client import register_user, login_user, get_user_by_email, update_user_password
@@ -219,7 +219,7 @@ async def forgot_password(request: ForgotPasswordRequest):
         # Send email with reset link
         reset_link = f"http://localhost:5173/reset-password?token={reset_token}"
         
-        email_sent = await send_password_reset_email(
+        email_sent = send_password_reset_email(
             email=request.email,
             reset_link=reset_link,
             user_name=user.get('fullName', 'User')
