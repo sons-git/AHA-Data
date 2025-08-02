@@ -4,7 +4,8 @@ import tempfile
 from io import BytesIO
 from pydub import AudioSegment
 from typing import Any, Dict, List
-from matplotlib.text import Annotation
+from pyannote.audio import Pipeline
+from pyannote.core import Annotation
 from app.schemas.conversations import FileData
 from app.services.manage_models.model_manager import model_manager
 
@@ -31,7 +32,7 @@ def process_filedata_with_diarization(file_data: FileData) -> Dict[str, Any]:
         file_data (FileData): Uploaded file containing audio bytes and metadata.
     
     Returns:
-        Tuple[Any, AudioSegment]: Diarization result object and speech-only audio.
+        Dict[str, Any]: A dictionary containing the diarization result and the base64-encoded speech-only audio.
     """
     temp_audio_path = None
     temp_speech_path = None

@@ -1,7 +1,6 @@
 import httpx
 import traceback
 from typing import List
-from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, UploadFile, File, Form
 from app.database.redis_client import get_redis_config
@@ -14,6 +13,8 @@ from app.database.mongo_client import (
     delete_conversation_by_id,
     update_conversation_title,
 )
+from app.schemas.audio import Audio, Text
+from app.utils.text_processing.text_cleaning import clean_text_for_speech
 from app.schemas.conversations import (
     FileData,
     Message,
@@ -68,7 +69,7 @@ async def create_conversation_by_user_id(
             title_response = await client.post(
                 "/api/conversations/generate_title",
                 json=processed_message,
-                timeout=60.0
+                timeout=120.0
             )
 
             if title_response.status_code != 200:
@@ -318,7 +319,7 @@ async def stream_message(conversation_id: str,
         # Process files and classify message
         processed_file = await handle_file_processing(message.content, message.files)
         classified_message = await classify_message(processed_file, conversation_id)
-        
+
         return StreamingResponse(stream_response(conversation_id, message, classified_message), media_type="text/event-stream")
 
     except Exception as e:
@@ -330,7 +331,7 @@ async def stream_message(conversation_id: str,
         )
     
 @router.post("/{conversation_id}/web/search")
-async def web_search(conversation_id: str, request: Request):
+async def web_search(conversation_id: str, content: str = Form(None), timestamp: str = Form(None)):
     """
     Perform a web search and return formatted results.
 
@@ -348,14 +349,11 @@ async def web_search(conversation_id: str, request: Request):
                 "Conversation ID and search query are required",
                 400
             )
-        
-        body = await request.json()
-        content = body.get("content") if "content" in body and isinstance(body["content"], str) and body["content"] else None
-        
+
         message = Message(
             content=content,
             image=None,
-            timestamp=body.get("timestamp")
+            timestamp=timestamp
         )
 
         if not message.content:
@@ -371,7 +369,7 @@ async def web_search(conversation_id: str, request: Request):
                 400
             )
 
-        search_results = await search(message.content)
+        search_results = await search(content)
 
         return StreamingResponse(stream_response(conversation_id, message, search_results), media_type="text/event-stream")
     
@@ -380,5 +378,91 @@ async def web_search(conversation_id: str, request: Request):
         return build_error_response(
             "WEB_SEARCH_ERROR",
             f"Web search failed: {str(e)}",
+            500
+        )
+
+@router.post("/speech_to_text")
+async def speech_to_text(request: Audio):
+    """
+    Transcribe the given audio file using Faster-Whisper.
+
+    Args:
+        request (Audio): Request containing base64-encoded audio data.
+
+    Returns:
+        str: The transcribed text from the audio file.
+    """
+    try:
+        async with httpx.AsyncClient(base_url=base_url) as client:
+            response = await client.post(
+                "/api/conversations/speech_to_text",
+                json=request.dict(),
+                timeout=30.0
+            )
+            response.raise_for_status()
+
+        transcription = response.json()
+        return transcription
+    
+    except Exception as e:
+        traceback.print_exc()
+        return build_error_response(
+            "TRANSCRIPTION_FAILED",
+            f"Failed to transcribe audio: {str(e)}",
+            500
+        )
+    
+@router.post("/{conversation_id}/text_to_speech")
+async def text_to_speech(conversation_id: str, input: Text):
+    """
+    Convert text to speech for a specific conversation.
+
+    Args:
+        conversation_id (str): The ID of the conversation.
+        input (Text): Input text to be converted to speech.
+
+    Returns:
+        StreamingResponse: The audio stream of the converted text.
+    """
+    try:
+        if not conversation_id:
+            return build_error_response(
+                "INVALID_INPUT",
+                "Conversation ID is required",
+                400
+            )
+        if not input or not input.text:
+            return build_error_response(
+                "INVALID_INPUT",
+                "Input text is required",
+                400
+            )
+
+        input.text = await clean_text_for_speech(input.text)
+        
+        async with httpx.AsyncClient(base_url=base_url) as client:
+            response = await client.post(
+                "/api/conversations/text_to_speech",
+                json=input.dict(),
+                timeout=30.0
+            )
+            response.raise_for_status()
+
+        return StreamingResponse(
+            response.aiter_bytes(),
+            media_type="audio/mpeg",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Cache-Control"
+            }
+        )
+
+    except Exception as e:
+        traceback.print_exc()
+        return build_error_response(
+            "TEXT_TO_SPEECH_FAILED",
+            f"Failed to convert text to speech: {str(e)}",
             500
         )

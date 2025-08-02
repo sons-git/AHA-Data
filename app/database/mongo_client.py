@@ -118,7 +118,7 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
     files = []
     for file_data in (message.files or []):
         try:
-            gcs_url = upload_file_to_gcs(convo_id, file_data)
+            gcs_url = await upload_file_to_gcs(convo_id, file_data)
             files.append({
                 "name": file_data.name,
                 "type": file_data.type,
@@ -211,7 +211,7 @@ async def delete_conversation_by_id(conversation_id: str, user_id: str) -> Dict:
     
     # Step 2: Delete from GCS
     try:
-        delete_files_from_gcs(conversation_id)
+        await delete_files_from_gcs(conversation_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Deleted in DBs but failed to delete GCS files: {str(e)}")
     return {"message": "Conversation deleted from MongoDB and Qdrant", "conversation_id": conversation_id}
