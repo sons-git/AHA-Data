@@ -372,9 +372,10 @@ async def web_search(conversation_id: str, content: str = Form(None), timestamp:
             )
 
         search_results = await search(content)
+        final_response = await stream_response(conversation_id, message, search_results)
 
-        return StreamingResponse(stream_response(conversation_id, message, search_results), media_type="text/event-stream")
-    
+        return {"final_response": final_response}
+
     except Exception as e:
         traceback.print_exc()
         return build_error_response(
