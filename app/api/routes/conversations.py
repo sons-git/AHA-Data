@@ -320,7 +320,9 @@ async def stream_message(conversation_id: str,
         processed_file = await handle_file_processing(message.content, message.files)
         classified_message = await classify_message(processed_file, conversation_id)
 
-        return StreamingResponse(stream_response(conversation_id, message, classified_message), media_type="text/event-stream")
+        final_response = await stream_response(conversation_id, message, classified_message)
+
+        return {"final_response": final_response}
 
     except Exception as e:
         traceback.print_exc()
