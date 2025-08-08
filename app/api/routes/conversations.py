@@ -415,25 +415,18 @@ async def speech_to_text(request: Audio):
             500
         )
     
-@router.post("/{conversation_id}/text_to_speech")
-async def text_to_speech(conversation_id: str, input: Text):
+@router.post("/text_to_speech")
+async def text_to_speech(input: Text):
     """
-    Convert text to speech for a specific conversation.
+    Convert text to speech and play it on the backend server.
 
     Args:
-        conversation_id (str): The ID of the conversation.
         input (Text): Input text to be converted to speech.
 
     Returns:
-        StreamingResponse: The audio stream of the converted text.
+        dict: Success response confirming audio was played.
     """
     try:
-        if not conversation_id:
-            return build_error_response(
-                "INVALID_INPUT",
-                "Conversation ID is required",
-                400
-            )
         if not input or not input.text:
             return build_error_response(
                 "INVALID_INPUT",
@@ -443,24 +436,22 @@ async def text_to_speech(conversation_id: str, input: Text):
 
         input.text = await clean_text_for_speech(input.text)
         
-        async with httpx.AsyncClient(base_url=base_url) as client:
+        async with httpx.AsyncClient(base_url=base_url, timeout=300) as client:
             response = await client.post(
                 "/api/conversations/text_to_speech",
                 json=input.dict(),
                 timeout=30.0
             )
             response.raise_for_status()
+            
+            # Get the JSON response from backend
+            result = response.json()
 
-        return StreamingResponse(
-            response.aiter_bytes(),
-            media_type="audio/mpeg",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Cache-Control"
-            }
-        )
+        return {
+            "status": "success",
+            "message": "Audio played successfully on server",
+            "backend_response": result
+        }
 
     except Exception as e:
         traceback.print_exc()

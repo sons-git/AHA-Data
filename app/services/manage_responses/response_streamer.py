@@ -6,7 +6,7 @@ from fastapi.encoders import jsonable_encoder
 from app.database.mongo_client import save_message
 from app.schemas.conversations import Message, ProcessedMessage
 
-BACKEND_URL = get_redis_config("api_keys")["BACKEND_URL"]
+BACKEND_URL = get_redis_config("api_keys").get("BACKEND_URL")
     
 async def stream_response(conversation_id: str, message: Message, processed_message: ProcessedMessage):
         """Stream data and get properly formatted final response"""
