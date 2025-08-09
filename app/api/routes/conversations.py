@@ -417,15 +417,6 @@ async def speech_to_text(request: Audio):
     
 @router.post("/text_to_speech")
 async def text_to_speech(input: Text):
-    """
-    Convert text to speech and play it on the backend server.
-
-    Args:
-        input (Text): Input text to be converted to speech.
-
-    Returns:
-        dict: Success response confirming audio was played.
-    """
     try:
         if not input or not input.text:
             return build_error_response(
@@ -434,24 +425,25 @@ async def text_to_speech(input: Text):
                 400
             )
 
+        # Preprocess the text
         input.text = await clean_text_for_speech(input.text)
-        
-        async with httpx.AsyncClient(base_url=base_url, timeout=300) as client:
-            response = await client.post(
-                "/api/conversations/text_to_speech",
-                json=input.dict(),
-                timeout=30.0
-            )
-            response.raise_for_status()
-            
-            # Get the JSON response from backend
-            result = response.json()
 
-        return {
-            "status": "success",
-            "message": "Audio played successfully on server",
-            "backend_response": result
-        }
+        # Create httpx client without closing before StreamingResponse consumes it
+        client = httpx.AsyncClient(base_url=base_url, timeout=300)
+        backend_response = await client.post(
+            "/api/conversations/text_to_speech",
+            json=input.model_dump()
+        )
+        backend_response.raise_for_status()
+
+        # Return the audio as a streaming response
+        return StreamingResponse(
+            iter([backend_response.content]),  # Send raw bytes in one go
+            media_type="audio/mpeg",
+            headers={
+                "Content-Disposition": 'inline; filename="speech.mp3"'
+            }
+        )
 
     except Exception as e:
         traceback.print_exc()
