@@ -1,3 +1,4 @@
+import asyncio
 import json
 import httpx
 from app.database.redis_client import get_redis_config
@@ -35,5 +36,5 @@ async def stream_response(conversation_id: str, message: Message, processed_mess
                             yield f"data: ERROR - Invalid JSON from backend\n\n"
                             return
 
-        await save_message(convo_id=conversation_id, message=message, response=final_response)
+        asyncio.create_task(save_message(convo_id=conversation_id, message=message, response=final_response))
         yield "data: [DONE]\n\n"

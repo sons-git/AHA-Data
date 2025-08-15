@@ -7,6 +7,7 @@ from app.schemas.conversations import Message
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.schemas.users import UserCreate, UserLogin
 from app.database.redis_client import get_redis_config
+from app.services.search_service import write_client, INDEX_NAME
 from app.utils.common import serialize_mongo_document, serialize_user
 from app.database.gcs_client import upload_file_to_gcs, delete_files_from_gcs
 
@@ -140,6 +141,7 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
     }
 
     bot_reply = {
+        "_id": str(ObjectId()), 
         "sender": "assistant",
         "content": response,
         "timestamp": datetime.utcnow()
@@ -150,6 +152,22 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
         {"_id": ObjectId(convo_id)},
         {"$push": {"messages": {"$each": [msg, bot_reply]}}}
     )
+
+    # Sync message to Algolia
+    convo_doc = await conversation_collection.find_one({"_id": ObjectId(convo_id)})
+    response = await write_client.save_object(
+        index_name=INDEX_NAME,
+        body={
+            "objectID": bot_reply["_id"],
+            "title": convo_doc.get("title", ""),
+            "content": response,
+            "timestamp": datetime.utcnow().isoformat(),
+            "user_id": convo_doc.get("user_id", ""),
+            "conversation_id": convo_id
+        }
+    )
+    if not response or (hasattr(response, "errors") and response.errors):
+        raise Exception("Failed to save message to Algolia index")
 
 """Update the title of a conversation"""
 async def update_conversation_title(convo_id: str, new_title: str):
@@ -174,8 +192,25 @@ async def update_conversation_title(convo_id: str, new_title: str):
             
         # Return the updated conversation
         updated_convo = await conversation_collection.find_one({"_id": ObjectId(convo_id)})
-        return serialize_mongo_document(updated_convo)
         
+        # Update Algolia index with new title
+        objects_to_update = []
+        for msg in updated_convo.get("messages", []):
+            if msg.get("sender") == "assistant":
+                objects_to_update.append({
+                    "objectID": msg.get("_id", f"{convo_id}_{msg.get('timestamp', '').isoformat()}"),
+                    "title": new_title
+                })
+
+        response = await write_client.partial_update_objects(
+            objects=objects_to_update,
+            index_name=INDEX_NAME
+        )
+        if not response or (hasattr(response, "errors") and response.errors):
+            raise Exception("Failed to update Algolia index with new conversation title")
+
+        return serialize_mongo_document(updated_convo)
+
     except Exception as e:
         print(f"Error updating conversation title: {e}")
         return None
@@ -214,7 +249,18 @@ async def delete_conversation_by_id(conversation_id: str, user_id: str) -> Dict:
         await delete_files_from_gcs(conversation_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Deleted in DBs but failed to delete GCS files: {str(e)}")
-    return {"message": "Conversation deleted from MongoDB and Qdrant", "conversation_id": conversation_id}
+    
+    # Step 3: Delete from Algolia
+    response = await write_client.delete_by(
+        index_name=INDEX_NAME,
+        delete_by_params={
+            "filters": f"conversation_id:{conversation_id}",
+        }
+    )
+    if not response or (hasattr(response, "errors") and response.errors):
+        raise HTTPException(status_code=500, detail="Failed to delete conversation from Algolia index")
+    
+    return {"message": "Conversation deleted from MongoDB and GCS", "conversation_id": conversation_id}
 
 async def get_recent_conversations(convo_id: str, limit: int = 100) -> list[str]:
     """

@@ -24,6 +24,7 @@ async def search(query: str):
         "key": API_KEY,
         "cx": CX,
         "q": sanitized_query,
+        "safe": "active",  # Ensure safe search
         "num": 5   # limit results
     }
 
@@ -40,7 +41,7 @@ async def search(query: str):
     ]
 
     return ProcessedMessage(
-        content=query, # thử lại phát
+        content=query,
         context=formatted_results,
         images=None,
         recent_conversations=None,
