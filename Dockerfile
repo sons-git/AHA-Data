@@ -18,7 +18,7 @@ RUN mkdir -p /tmp/uv-extract && \
 COPY requirements.txt .
 
 # Use uv for package install
-RUN uv pip install -r requirements.txt
+RUN uv pip install --system -r requirements.txt
 
 COPY . .
 
