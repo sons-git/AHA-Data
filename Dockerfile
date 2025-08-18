@@ -16,12 +16,7 @@ RUN curl -L "https://github.com/astral-sh/uv/releases/download/v${UV_VERSION}/uv
 
 # Make sure it's executable
 RUN chmod +x /usr/local/bin/uv
-RUN mkdir -p /tmp/uv-extract && \
-  curl -L https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz \
-  | tar xz -C /tmp/uv-extract && \
-  mv /tmp/uv-extract/uv /usr/local/bin/uv && \
-  chmod +x /usr/local/bin/uv && \
-  rm -rf /tmp/uv-extract
+
 COPY requirements.txt .
 
 # Use uv for package install
