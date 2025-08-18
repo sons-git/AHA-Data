@@ -1,0 +1,43 @@
+import dspy
+from datetime import datetime
+from pydantic import BaseModel, Field
+from typing import List, Optional, Any, Dict, Union
+
+class DiarizedAudio(BaseModel):
+    diarization: List[Dict[str, Union[str, float]]]
+    speech_audio_base64: str
+
+class FileData(BaseModel):
+    name: str
+    type: str
+    file: Any
+
+class Message(BaseModel):
+    content: Optional[str] = None
+    files: Optional[List[FileData]] = None
+    timestamp: datetime
+
+class ProcessedMessage(BaseModel):
+    content: Optional[str] = None
+    images: Optional[List[dspy.Image]] = None
+    context: Optional[List[str]] = None
+    recent_conversations: Optional[List[str]] = None
+    files: Optional[List[str]] = None
+    audio: Optional[List[DiarizedAudio]] = None
+
+class WebSearchResponse(BaseModel):
+    content: str
+    search_result: str
+    url: str
+    title: str
+    score: Optional[float] = None
+
+class Conversation(BaseModel):
+    id: str
+    user_id: str
+    title: str
+    created_at: datetime
+    messages: List[Message] = Field(default_factory=list)
+
+class UpdateConversationRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200, description="New title for the conversation")
