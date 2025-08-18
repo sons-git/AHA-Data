@@ -26,6 +26,7 @@ email-validator==2.2.0
 python-multipart==0.0.20
 
 # LLM Ecosystem
+openai==1.31.0
 dspy==2.6.27
 pydub==0.25.1
 
