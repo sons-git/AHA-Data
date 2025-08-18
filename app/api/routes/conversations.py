@@ -14,6 +14,7 @@ from app.database.mongo_client import (
     update_conversation_title,
 )
 from app.schemas.audio import Audio, Text
+from app.services.search_service import search_conversations_by_user_id
 from app.utils.text_processing.text_cleaning import clean_text_for_speech
 from app.schemas.conversations import (
     FileData,
@@ -464,5 +465,37 @@ async def text_to_speech(conversation_id: str, input: Text):
         return build_error_response(
             "TEXT_TO_SPEECH_FAILED",
             f"Failed to convert text to speech: {str(e)}",
+            500
+        )
+    
+@router.get("/search")
+async def search_conversations(query: str, user_id: str):
+    """
+    Search conversations by user ID and query.
+
+    Args:
+        query (str): The search query.
+        user_id (str): The ID of the user.
+
+    Returns:
+        JSONResponse: A JSON object containing the search results.
+    """
+    try:
+        if not query or not user_id:
+            return build_error_response(
+                "INVALID_INPUT",
+                "Query and user ID are required",
+                400
+            )
+
+        search_results = await search_conversations_by_user_id(query, user_id)
+
+        return JSONResponse(content={"results": search_results})
+
+    except Exception as e:
+        traceback.print_exc()
+        return build_error_response(
+            "SEARCH_FAILED",
+            f"Failed to search conversations: {str(e)}",
             500
         )
