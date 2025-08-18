@@ -11,7 +11,7 @@ COPY requirements.txt .
 RUN pip install uv
 
 RUN uv pip install -r requirements.txt
-
+RUN pip install uv && uv pip install -r requirements.txt
 COPY . .
 
 EXPOSE 8000
