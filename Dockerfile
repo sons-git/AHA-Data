@@ -1,14 +1,19 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
-WORKDIR /app
+# Install dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends curl
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+# Download and install uv binary
+RUN curl -L https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz \
+  | tar xz -C /usr/local/bin
+
+# Make sure it's executable
+RUN chmod +x /usr/local/bin/uv
 
 COPY requirements.txt .
 
-RUN pip install -r requirements.txt
+# Use uv for package install
+RUN uv pip install -r requirements.txt
 
 COPY . .
 
