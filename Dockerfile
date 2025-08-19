@@ -1,5 +1,5 @@
-# Use the official lightweight Python 3.11 image as the base
-FROM python:3.11-slim
+# Use the official Python 3.11 image as the base
+FROM python:3.11
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -30,4 +30,6 @@ EXPOSE 8080
 
 # Start the FastAPI app with Uvicorn
 # Shell form allows $PORT to expand correctly at runtime
-CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 4
+RUN uv pip install gunicorn
+
+CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:8000", "--workers=4"]
