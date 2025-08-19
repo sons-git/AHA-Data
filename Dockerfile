@@ -32,4 +32,4 @@ EXPOSE 8080
 # Shell form allows $PORT to expand correctly at runtime
 RUN uv pip install gunicorn
 
-CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:8000", "--workers=4"]
+CMD gunicorn -k uvicorn.workers.UvicornWorker app.main:app --bind 0.0.0.0:${PORT} --workers=4
