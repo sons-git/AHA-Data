@@ -18,7 +18,7 @@ COPY requirements.txt .
 # Install uv and all Python dependencies in one layer
 RUN pip install uv \
     && uv pip install --system -r requirements.txt \
-    && uv pip install gunicorn
+    && uv pip install --system gunicorn
 
 # Copy the rest of the application code
 COPY . .
