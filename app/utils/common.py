@@ -176,7 +176,7 @@ async def classify_message(processed_message: ProcessedMessage, convo_id: str) -
             hybrid_search_task
         )
         
-        processed_message.context = rrf(points=points, n_points=3, payload=["text"])
+        processed_message.context = rrf(points=points, n_points=3)
     else:
         # Just wait for recent conversations
         recent_conversations = await recent_convos_task
