@@ -31,5 +31,4 @@ EXPOSE 8080
 # Start the FastAPI app with Uvicorn
 # Shell form allows $PORT to expand correctly at runtime
 RUN uv pip install gunicorn
-
 CMD gunicorn -k uvicorn.workers.UvicornWorker app.main:app --bind 0.0.0.0:${PORT} --workers=4
