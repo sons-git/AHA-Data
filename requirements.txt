@@ -27,6 +27,8 @@ python-multipart==0.0.20
 
 # LLM Ecosystem
 dspy==2.6.27
+litellm==1.65.0.post1
+openai==1.66.1
 pydub==0.25.1
 
 # ML
