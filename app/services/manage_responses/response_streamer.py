@@ -30,6 +30,3 @@ async def stream_response(conversation_id: str, message: Message, processed_mess
         except Exception as e:
             traceback.print_exc()
             raise RuntimeError(f"Stream processing failed: {str(e)}")
-
-        asyncio.create_task(save_message(convo_id=conversation_id, message=message, response=final_response))
-            raise RuntimeError(f"Stream processing failed: {str(e)}")
