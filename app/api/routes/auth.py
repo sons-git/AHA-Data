@@ -215,9 +215,10 @@ async def forgot_password(request: ForgotPasswordRequest):
         
         # Generate reset token
         reset_token = await generate_reset_token(request.email)
-        
+        from app.database.redis_client import get_redis_config
+        FRONTEND_URL=get_redis_config("api_keys")["FRONTEND_URL"]
         # Send email with reset link
-        reset_link = f"http://localhost:5173/reset-password?token={reset_token}"
+        reset_link = f"{FRONTEND_URL}/reset-password?token={reset_token}"
         
         email_sent = send_password_reset_email(
             email=request.email,
