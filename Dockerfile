@@ -17,8 +17,7 @@ COPY requirements.txt .
 
 # Install uv and all Python dependencies in one layer
 RUN pip install uv \
-    && uv pip install --system -r requirements.txt \
-    && uv pip install --system gunicorn
+    && uv pip install --system -r requirements.txt 
 
 # Copy the rest of the application code
 COPY . .
@@ -31,4 +30,5 @@ EXPOSE 8080
 
 # Start the FastAPI app with Uvicorn
 # Shell form allows $PORT to expand correctly at runtime
-CMD gunicorn -k uvicorn.workers.UvicornWorker app.main:app --bind 0.0.0.0:${PORT} --workers=4
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 4
+
