@@ -321,7 +321,9 @@ async def stream_message(conversation_id: str,
         processed_file = await handle_file_processing(message.content, message.files)
         classified_message = await classify_message(processed_file, conversation_id)
 
-        return StreamingResponse(stream_response(conversation_id, message, classified_message), media_type="text/event-stream")
+        final_response = await stream_response(conversation_id, message, classified_message)
+
+        return {"final_response": final_response}
 
     except Exception as e:
         traceback.print_exc()
@@ -371,9 +373,10 @@ async def web_search(conversation_id: str, content: str = Form(None), timestamp:
             )
 
         search_results = await search(content)
+        final_response = await stream_response(conversation_id, message, search_results)
 
-        return StreamingResponse(stream_response(conversation_id, message, search_results), media_type="text/event-stream")
-    
+        return {"final_response": final_response}
+
     except Exception as e:
         traceback.print_exc()
         return build_error_response(
@@ -413,25 +416,9 @@ async def speech_to_text(request: Audio):
             500
         )
     
-@router.post("/{conversation_id}/text_to_speech")
-async def text_to_speech(conversation_id: str, input: Text):
-    """
-    Convert text to speech for a specific conversation.
-
-    Args:
-        conversation_id (str): The ID of the conversation.
-        input (Text): Input text to be converted to speech.
-
-    Returns:
-        StreamingResponse: The audio stream of the converted text.
-    """
+@router.post("/text_to_speech")
+async def text_to_speech(input: Text):
     try:
-        if not conversation_id:
-            return build_error_response(
-                "INVALID_INPUT",
-                "Conversation ID is required",
-                400
-            )
         if not input or not input.text:
             return build_error_response(
                 "INVALID_INPUT",
@@ -439,24 +426,23 @@ async def text_to_speech(conversation_id: str, input: Text):
                 400
             )
 
+        # Preprocess the text
         input.text = await clean_text_for_speech(input.text)
-        
-        async with httpx.AsyncClient(base_url=base_url) as client:
-            response = await client.post(
-                "/api/conversations/text_to_speech",
-                json=input.dict(),
-                timeout=30.0
-            )
-            response.raise_for_status()
 
+        # Create httpx client without closing before StreamingResponse consumes it
+        client = httpx.AsyncClient(base_url=base_url, timeout=300)
+        backend_response = await client.post(
+            "/api/conversations/text_to_speech",
+            json=input.model_dump()
+        )
+        backend_response.raise_for_status()
+
+        # Return the audio as a streaming response
         return StreamingResponse(
-            response.aiter_bytes(),
+            iter([backend_response.content]),  # Send raw bytes in one go
             media_type="audio/mpeg",
             headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Cache-Control"
+                "Content-Disposition": 'inline; filename="speech.mp3"'
             }
         )
 

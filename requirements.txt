@@ -33,5 +33,4 @@ pydub==0.25.1
 
 # ML
 sentence_transformers==5.0.0
-transformers==4.53.1
 pyannote.audio

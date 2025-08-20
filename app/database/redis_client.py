@@ -14,20 +14,19 @@ redis_client = redis.Redis(
 )
 
 def get_redis_config(name: str) -> dict:
-    """
-    Retrieve and parse a JSON configuration stored in Redis.
+    key_type = redis_client.type(name) 
 
-    Args:
-        name (str): Redis key name.
+    if key_type == "string":
+        raw = redis_client.get(name)
+        if raw is None:
+            raise KeyError(f"Config '{name}' not found in Redis.")
+        return json.loads(raw)
 
-    Returns:
-        dict: Parsed configuration dictionary.
+    elif key_type == "hash":
+        data = redis_client.hgetall(name)
+        if not data:
+            raise KeyError(f"Config '{name}' not found in Redis.")
+        return data
 
-    Raises:
-        KeyError: If the key does not exist in Redis.
-        json.JSONDecodeError: If the stored value is not valid JSON.
-    """
-    raw = redis_client.get(name=name)
-    if raw is None:
-        raise KeyError(f"Config '{name}' not found in Redis.")
-    return json.loads(raw)
+    else:
+        raise TypeError(f"Unsupported Redis type for key '{name}': {key_type}")
