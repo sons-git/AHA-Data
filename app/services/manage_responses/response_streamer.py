@@ -1,5 +1,6 @@
 import asyncio
 import traceback
+import json
 import httpx
 from app.database.redis_client import get_redis_config
 from fastapi.encoders import jsonable_encoder
@@ -29,3 +30,6 @@ async def stream_response(conversation_id: str, message: Message, processed_mess
         except Exception as e:
             traceback.print_exc()
             raise RuntimeError(f"Stream processing failed: {str(e)}")
+
+        asyncio.create_task(save_message(convo_id=conversation_id, message=message, response=final_response))
+        yield "data: [DONE]\n\n"
