@@ -24,7 +24,7 @@ async def clean_text_for_speech(text: str) -> str:
     cleaned = html.unescape(cleaned)
 
     # 3. Remove unwanted special chars (keeping basic punctuation)
-    cleaned = re.sub(r"[^\w\s.,!?;:'\"-]", "", cleaned, flags=re.UNICODE)
+    cleaned = re.sub(r"[^\w\s.,!?;:'\"-]", "", cleaned)
 
     # 4. Normalize whitespace
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
