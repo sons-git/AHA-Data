@@ -128,7 +128,7 @@ async def add_message_vector(collection_name: str, conversation_id: str, user_me
         timestamp: Timestamp of the message
     """
     try:
-        message = user_message or "*User sent a image"
+        message = user_message or "*User sent an image"
         
         # Ensure the collection exists
         await ensure_collection_exists(collection_name)
