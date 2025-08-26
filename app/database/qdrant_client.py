@@ -215,7 +215,7 @@ async def delete_conversation_vectors(collection_name: str, conversation_id: str
         print(f"[Qdrant] Error deleting conversation vectors: {e}")
         raise
 
-async def get_recent_conversations(collection_name: str, limit: int) -> list[str]:
+async def get_recent_conversations(collection_name: str, limit: int = 50) -> list[str]:
     """
     Retrieve the most recent conversations from the Qdrant collection based on timestamp.
 
