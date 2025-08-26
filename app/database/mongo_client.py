@@ -163,7 +163,7 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
     user_id = convo["user_id"]
 
     # Store the message and bot response vector in Qdrant for retrieval/history
-    asyncio.create_task(
+    task = asyncio.create_task(
         add_message_vector(
             collection_name=user_id,
             conversation_id=convo_id,
