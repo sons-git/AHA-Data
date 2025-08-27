@@ -173,8 +173,9 @@ async def classify_message(processed_message: ProcessedMessage, user_id: str) ->
                 limit=4
             )
         )
-        processed_message.context = rrf(points=points, n_points=3, payload=["text"])
-        processed_message.recent_conversations = recent_conversations
+        
+        processed_message.context = rrf(points=points, n_points=3)
+
     else:
         processed_message.recent_conversations = await get_recent_conversations(collection_name=user_id, limit=50)
 

@@ -50,8 +50,9 @@ def rrf(
         context_list = []
         for idx, doc_id in enumerate(top_doc_ids):
             doc = doc_lookup[doc_id]
-            payload_content = [f"Context {idx}: {doc.payload.get(key, '')}" for key in payload]
-            context_list.append("\n".join(payload_content))
+            # Include all keys in the payload
+            payload_content = [f"{key}: {value}" for key, value in doc.payload.items()]
+            context_list.append(f"Context {idx}:\n" + "\n".join(payload_content))
 
         return context_list
 
