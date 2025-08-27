@@ -10,6 +10,7 @@ from app.database.redis_client import get_redis_config
 gcs_key_data = get_redis_config("gcs-service-key")
 credentials = service_account.Credentials.from_service_account_info(gcs_key_data)
 BUCKET_NAME = get_redis_config("api_keys")["BUCKET_NAME"]
+LB_DOMAIN = get_redis_config("api_keys")["LB_DOMAIN"]
 
 async def upload_file_to_gcs(convo_id: str, file_data: FileData) -> str:
     """
@@ -65,7 +66,7 @@ async def upload_file_to_gcs(convo_id: str, file_data: FileData) -> str:
     blob.upload_from_string(file_bytes, content_type=file_data.type)
 
     # Return the public GCS URL of the uploaded file
-    return f"https://storage.cloud.google.com/{BUCKET_NAME}/{unique_filename}"
+    return f"{LB_DOMAIN}/{unique_filename}"
 
 async def delete_files_from_gcs(convo_id: str) -> None:
     """

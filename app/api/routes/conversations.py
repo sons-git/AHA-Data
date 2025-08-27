@@ -319,7 +319,7 @@ async def stream_message(conversation_id: str,
 
         # Process files and classify message
         processed_file = await handle_file_processing(message.content, message.files)
-        classified_message = await classify_message(processed_file, conversation_id)
+        classified_message = await classify_message(processed_file, user_id)
 
         final_response = await stream_response(conversation_id, message, classified_message)
 
