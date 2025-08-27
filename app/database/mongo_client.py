@@ -7,8 +7,10 @@ from app.schemas.conversations import Message
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.schemas.users import UserCreate, UserLogin
 from app.database.redis_client import get_redis_config
+from app.services.search_service import write_client, INDEX_NAME
 from app.utils.common import serialize_mongo_document, serialize_user
 from app.database.gcs_client import upload_file_to_gcs, delete_files_from_gcs
+from app.database.qdrant_client import add_message_vector, delete_conversation_vectors
 
 api_keys = get_redis_config("api_keys")
 client = AsyncIOMotorClient(api_keys["MONGO_DB_URL"])
@@ -140,6 +142,7 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
     }
 
     bot_reply = {
+        "_id": str(ObjectId()), 
         "sender": "assistant",
         "content": response,
         "timestamp": datetime.utcnow()
@@ -150,6 +153,40 @@ async def save_message(convo_id: str, message: Message, response: str) -> None:
         {"_id": ObjectId(convo_id)},
         {"$push": {"messages": {"$each": [msg, bot_reply]}}}
     )
+
+    # Add message to Qdrant for history tracking
+    # Lookup conversation
+    convo = await conversation_collection.find_one({"_id": ObjectId(convo_id)})
+    if not convo:
+        return None
+    # Extract user_id from the conversation document
+    user_id = convo["user_id"]
+
+    # Store the message and bot response vector in Qdrant for retrieval/history
+    task = asyncio.create_task(
+        add_message_vector(
+            collection_name=user_id,
+            conversation_id=convo_id,
+            user_message=message.content,
+            bot_response=response,
+            timestamp=msg["timestamp"].isoformat(),
+        )
+    )
+
+    # Sync message to Algolia
+    response = await write_client.save_object(
+        index_name=INDEX_NAME,
+        body={
+            "objectID": bot_reply["_id"],
+            "title": convo.get("title", ""),
+            "content": response,
+            "timestamp": datetime.utcnow().isoformat(),
+            "user_id": convo["user_id"],
+            "conversation_id": convo_id
+        }
+    )
+    if not response or (hasattr(response, "errors") and response.errors):
+        raise Exception("Failed to save message to Algolia index")
 
 """Update the title of a conversation"""
 async def update_conversation_title(convo_id: str, new_title: str):
@@ -174,8 +211,25 @@ async def update_conversation_title(convo_id: str, new_title: str):
             
         # Return the updated conversation
         updated_convo = await conversation_collection.find_one({"_id": ObjectId(convo_id)})
-        return serialize_mongo_document(updated_convo)
         
+        # Update Algolia index with new title
+        objects_to_update = []
+        for msg in updated_convo.get("messages", []):
+            if msg.get("sender") == "assistant":
+                objects_to_update.append({
+                    "objectID": msg.get("_id", f"{convo_id}_{msg.get('timestamp', '').isoformat()}"),
+                    "title": new_title
+                })
+
+        response = await write_client.partial_update_objects(
+            objects=objects_to_update,
+            index_name=INDEX_NAME
+        )
+        if not response or (hasattr(response, "errors") and response.errors):
+            raise Exception("Failed to update Algolia index with new conversation title")
+
+        return serialize_mongo_document(updated_convo)
+
     except Exception as e:
         print(f"Error updating conversation title: {e}")
         return None
@@ -214,47 +268,24 @@ async def delete_conversation_by_id(conversation_id: str, user_id: str) -> Dict:
         await delete_files_from_gcs(conversation_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Deleted in DBs but failed to delete GCS files: {str(e)}")
-    return {"message": "Conversation deleted from MongoDB and Qdrant", "conversation_id": conversation_id}
-
-async def get_recent_conversations(convo_id: str, limit: int = 100) -> list[str]:
-    """
-    Retrieve the last `limit` messages from a specific conversation. 
-    Args:
-        convo_id (str): The conversation ID to fetch messages from.
-        limit (int): The maximum number of messages to return (default: 100).   
-    Returns:
-        list[str]: A list of formatted strings containing user and bot messages.
-    """
+    
+    # Step 3: Delete from Qdrant
     try:
-        if not ObjectId.is_valid(convo_id):
-            raise ValueError("Invalid conversation ID format")
-        
-        # Fetch conversation by ID
-        conversation = await conversation_collection.find_one({"_id": ObjectId(convo_id)})
-        if not conversation:
-            return ["This is user's first ever message"]
-
-        # Limit to last `limit` messages
-        messages = conversation.get("messages", [])[-limit:]
-        output_list = []
-        idx = 1
-
-        for i in range(0, len(messages), 2):
-            user_msg = ""
-            bot_msg = ""
-
-            if i < len(messages) and messages[i].get("sender") == "user":
-                user_msg = messages[i].get("content", "")
-
-            if i + 1 < len(messages) and messages[i + 1].get("sender") == "assistant":
-                bot_msg = messages[i + 1].get("content", "")
-
-            output_list.append(f"Conversation {idx}:\nuser's message: {user_msg}\nassistant's response: {bot_msg}")
-            idx += 1
-        return output_list
+        await delete_conversation_vectors(collection_name=user_id, conversation_id=conversation_id)
     except Exception as e:
-        print(f"Error retrieving recent conversations: {e}")
-        return None
+        raise HTTPException(status_code=500, detail=f"Deleted in MongoDB but failed in Qdrant: {str(e)}")
+    
+    # Step 4: Delete from Algolia
+    response = await write_client.delete_by(
+        index_name=INDEX_NAME,
+        delete_by_params={
+            "filters": f"conversation_id:{conversation_id}",
+        }
+    )
+    if not response or (hasattr(response, "errors") and response.errors):
+        raise HTTPException(status_code=500, detail="Failed to delete conversation from Algolia index")
+    
+    return {"message": "Conversation deleted from MongoDB and GCS", "conversation_id": conversation_id}
 
 
 async def register_user(user_data: UserCreate):
