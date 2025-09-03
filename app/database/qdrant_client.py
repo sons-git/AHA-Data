@@ -239,11 +239,10 @@ async def get_recent_conversations(collection_name: str, limit: int = 50) -> lis
         if not scrolled_points:
             return ["This is user's first ever message"]
 
-        # Sort by timestamp (newest first) and take the specified limit
+        # Sort by timestamp and take the specified limit
         sorted_conversations = sorted(
             scrolled_points,
             key=lambda x: x.payload.get('timestamp', ''),
-            reverse=True  # newest first
         )
 
         # Format conversations into list of strings
@@ -252,7 +251,7 @@ async def get_recent_conversations(collection_name: str, limit: int = 50) -> lis
 
         for idx, doc in enumerate(sorted_conversations[:limit]):
             payload_content = [f"{key}: {doc.payload.get(key, '')}" for key in payload_keys]
-            content = f"Conversation {idx}:\n" + "\n".join(payload_content)
+            content = f"Conversation {idx + 1}:\n" + "\n".join(payload_content)
             context_chunks.append(content)
 
         return context_chunks
