@@ -2,16 +2,19 @@ import asyncio
 import csv
 import io
 import base64
-from docx import Document
-from PyPDF2 import PdfReader
+import docx2txt
 from typing import List, Tuple, Optional
+from pdfminer.high_level import extract_text
+from pdfminer.pdfparser import PDFSyntaxError
+from pdfminer.pdfdocument import PDFEncryptionError
 
 import dspy
 from app.schemas.conversations import FileData, ProcessedMessage
 from app.utils.image_processing import convert_to_dspy_image
+from app.utils.text_processing.text_cleaning import clean_text
 from .audio_processing import process_filedata_with_diarization
 
-async def extract_text(file_data: FileData) -> Optional[str]:
+async def extract_text_from_file(file_data: FileData) -> Optional[str]:
     """
     Extract text content from various file types based on FileData.file.
 
@@ -30,46 +33,45 @@ async def extract_text(file_data: FileData) -> Optional[str]:
 
         # Handle plain text and markdown files
         if file_data.type in {"text/plain", "text/markdown"}:
-            return content_bytes.decode("utf-8", errors="ignore")
+            text = content_bytes.decode("utf-8", errors="ignore")
+            return await clean_text(text)
 
         # Handle CSV files
         elif file_data.type == "text/csv":
             decoded = content_bytes.decode("utf-8", errors="ignore")
             reader = csv.reader(io.StringIO(decoded))
             rows = [" | ".join(row) for row in reader]
-            return "\n".join(rows) if rows else None
+            text = "\n".join(rows) if rows else ""
+            return await clean_text(text)
 
         # Handle PDF files
         elif file_data.type == "application/pdf":
-            reader = PdfReader(io.BytesIO(content_bytes))
-            if reader.is_encrypted:
-                raise ValueError(f"PDF file '{file_data.name}' is encrypted and cannot be processed.")
-            extracted = []
-            for page_num, page in enumerate(reader.pages):
+            if file_data.type == "application/pdf":
                 try:
-                    text = page.extract_text()
-                    if text:
-                        extracted.append(text)
+                    text = extract_text(io.BytesIO(content_bytes))
+                    if not text:  # pdfminer returns None if nothing could be extracted
+                        return f"PDF file '{file_data.name}' might be encrypted or empty."
+                    return await clean_text(text) if text else text
+                except PDFEncryptionError:
+                    return f"PDF file '{file_data.name}' is encrypted and cannot be processed."
+                except PDFSyntaxError as e:
+                    return f"Corrupted or unreadable PDF '{file_data.name}': {e}"
                 except Exception as e:
-                    print(f"Failed to extract text from page {page_num} in {file_data.name}: {e}")
-            return "\n".join(extracted) if extracted else None
+                    return f"Error processing PDF '{file_data.name}': {e}"
 
         # Handle DOCX files
         elif file_data.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            doc = Document(io.BytesIO(content_bytes))
-            paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-            tables = []
-            for table in doc.tables:
-                for row in table.rows:
-                    cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-                    if cells:
-                        tables.append(" | ".join(cells))
-            all_text = paragraphs + tables
-            return "\n".join(all_text) if all_text else None
+            try:
+                text = docx2txt.process(io.BytesIO(content_bytes))
+                if text and text.strip():
+                    return await clean_text(text)
+                else:
+                    return f"DOCX file '{file_data.name}' is empty or unreadable."
+            except Exception as e:
+                return f"Error processing DOCX '{file_data.name}': {e}"
 
     except Exception as e:
-        print(f"Failed to extract text from {file_data.name}: {e}")
-        return None
+        return (f"Failed to extract text from {file_data.name}: {e}")
 
 async def classify_file(files: List[FileData]) -> Tuple[List[FileData], List[FileData], List[FileData]]:
     """
@@ -97,7 +99,7 @@ async def extract_text_concurrent(files: List[FileData]) -> List[str]:
     Raises:
         Exception: If any file extraction fails.
     """
-    tasks = [extract_text(file_data) for file_data in files]
+    tasks = [extract_text_from_file(file_data) for file_data in files]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     extracted = []
     for idx, r in enumerate(results):
@@ -170,11 +172,9 @@ async def handle_file_processing(content: str, files: List[FileData]) -> Process
         convert_images_concurrent(image_files),
         asyncio.gather(*[asyncio.to_thread(process_filedata_with_diarization, f) for f in audio_files])
     )
-            
-    # Combine original content with extracted text
-    combined_content = "\n\n".join(filter(None, [content] + extracted_texts))
+
     return ProcessedMessage(
-        content=combined_content,
+        content=content,
         images=dspy_images,
         context=None,
         recent_conversations=None,
