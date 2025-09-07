@@ -389,7 +389,8 @@ async def web_search(
             )
         
         processed_message = await handle_file_processing(message.content, message.files)
-        structured_results, processed_message.context = await search(content)
+        structured_results, formatted_results = await search(content)
+        processed_message.context = formatted_results
         processed_message.recent_conversations = await get_recent_conversations(collection_name=user_id, limit=50)
         final_response = await stream_response(conversation_id, message, processed_message)
 
