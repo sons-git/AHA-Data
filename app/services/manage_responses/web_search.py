@@ -35,19 +35,26 @@ async def search(query: str):
 
     items = data.get("items", [])
 
-    formatted_results: List[str] = [
-        f"{item.get('title')}: {item.get('snippet')} ({item.get('link')})"
+    structured_results = [
+        {
+            "title": item.get("title", ""),
+            "snippet": item.get("snippet", ""),
+            "link": item.get("link", "")
+        }
         for item in items
     ]
 
-    return ProcessedMessage(
-        content=query,
-        context=formatted_results,
-        images=None,
-        recent_conversations=None,
-        files=None,
-        audio=None 
-    ) 
+    formatted_results = [
+        (
+            f"Web Search Result {i+1}:\n"
+            f"  Title: {r['title']}\n"
+            f"  Snippet: {r['snippet']}\n"
+            f"  Link: {r['link']}"
+        )
+        for i, r in enumerate(structured_results)
+    ]
+
+    return structured_results, formatted_results
 
 
 def sanitize_query(query: str) -> str:
