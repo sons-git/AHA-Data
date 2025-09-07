@@ -45,7 +45,12 @@ async def search(query: str):
     ]
 
     formatted_results = [
-        f"Web Search Result {i+1}: Title: {r['title']} | Snippet: {r['snippet']} | Link: {r['link']}"
+        (
+            f"Web Search Result {i+1}:\n"
+            f"  Title: {r['title']}\n"
+            f"  Snippet: {r['snippet']}\n"
+            f"  Link: {r['link']}"
+        )
         for i, r in enumerate(structured_results)
     ]
 
