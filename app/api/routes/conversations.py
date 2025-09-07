@@ -4,7 +4,7 @@ from typing import List
 from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, UploadFile, File, Form
 from app.database.redis_client import get_redis_config
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 
 from app.database.mongo_client import (
     create_conversation,
@@ -15,17 +15,15 @@ from app.database.mongo_client import (
 )
 from app.schemas.audio import Audio, Text
 from app.services.search_service import search_conversations_by_user_id
-from app.utils.text_processing.text_cleaning import clean_text_for_speech
 from app.schemas.conversations import (
     FileData,
     Message,
     Conversation,
     UpdateConversationRequest,
 )
-from app.services.manage_responses.response_streamer import stream_response
-from app.services.manage_responses.web_search import search
+from app.services.worker import enqueue_job
 from app.utils.file_processing import handle_file_processing
-from app.utils.common import build_error_response, classify_message
+from app.utils.common import build_error_response
 
 base_url = get_redis_config("api_keys")["BACKEND_URL"]
 
@@ -295,43 +293,29 @@ async def stream_message(conversation_id: str,
             files=file_data_list,
             timestamp=timestamp
         )
-        
-        if not conversation_id or not user_id:
-            return build_error_response(
-                "INVALID_INPUT",
-                "Conversation ID and user ID are required",
-                400
-            )
-
-        if not message:
-            return build_error_response(
-                "INVALID_INPUT",
-                "Message is required",
-                400
-            )
 
         if not message.content and not getattr(message, "files", None):
-            return build_error_response(
-                "INVALID_INPUT",
-                "Message must contain either text content or files",
-                400
-            )
+            return build_error_response("INVALID_INPUT", "Message must contain either text or files", 400)
 
-        # Process files and classify message
-        processed_file = await handle_file_processing(message.content, message.files)
-        classified_message = await classify_message(processed_file, user_id)
+        job = {
+            "type": "stream",
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "message": message,
+        }
 
-        final_response = await stream_response(conversation_id, message, classified_message)
+        job_id = await enqueue_job(job)
 
-        return {"final_response": final_response}
+        return {"job_id": job_id}
 
     except Exception as e:
         traceback.print_exc()
         return build_error_response(
             "STREAM_INITIALIZATION_FAILED",
             f"Failed to initialize message stream: {str(e)}",
-            500
+            500,
         )
+
     
 @router.post("/{conversation_id}/web/search")
 async def web_search(conversation_id: str, content: str = Form(None), timestamp: str = Form(None)):
@@ -372,10 +356,16 @@ async def web_search(conversation_id: str, content: str = Form(None), timestamp:
                 400
             )
 
-        search_results = await search(content)
-        final_response = await stream_response(conversation_id, message, search_results)
+        job = {
+            "type": "stream",
+            "conversation_id": conversation_id,
+            "content": content,
+            "message": message,
+        }
 
-        return {"final_response": final_response}
+        job_id = await enqueue_job(job)
+
+        return {"job_id": job_id}
 
     except Exception as e:
         traceback.print_exc()
@@ -397,16 +387,12 @@ async def speech_to_text(request: Audio):
         str: The transcribed text from the audio file.
     """
     try:
-        async with httpx.AsyncClient(base_url=base_url) as client:
-            response = await client.post(
-                "/api/conversations/speech_to_text",
-                json=request.dict(),
-                timeout=30.0
-            )
-            response.raise_for_status()
-
-        transcription = response.json()
-        return transcription
+        job = {
+            "type": "speech_to_text",
+            "data": request.dict(),
+        }
+        job_id = await enqueue_job(job)
+        return {"job_id": job_id}
     
     except Exception as e:
         traceback.print_exc()
@@ -426,25 +412,12 @@ async def text_to_speech(input: Text):
                 400
             )
 
-        # Preprocess the text
-        input.text = await clean_text_for_speech(input.text)
-
-        # Create httpx client without closing before StreamingResponse consumes it
-        client = httpx.AsyncClient(base_url=base_url, timeout=300)
-        backend_response = await client.post(
-            "/api/conversations/text_to_speech",
-            json=input.model_dump()
-        )
-        backend_response.raise_for_status()
-
-        # Return the audio as a streaming response
-        return StreamingResponse(
-            iter([backend_response.content]),  # Send raw bytes in one go
-            media_type="audio/mpeg",
-            headers={
-                "Content-Disposition": 'inline; filename="speech.mp3"'
-            }
-        )
+        job = {
+            "type": "text_to_speech",
+            "data": input.model_dump(),
+        }
+        job_id = await enqueue_job(job)
+        return {"job_id": job_id}
 
     except Exception as e:
         traceback.print_exc()
