@@ -1,7 +1,6 @@
-
 import base64
 from uuid import uuid4
-
+import multiprocessing
 import httpx
 from app.database.redis_client import get_redis_config
 from app.services.manage_responses.response_streamer import stream_response
@@ -90,7 +89,17 @@ async def enqueue_job(job: dict) -> str:
 def start_worker(app):
     """Start the background worker when the FastAPI app starts."""
     loop = asyncio.get_event_loop()
-    loop.create_task(worker())  # schedule async worker
+    
+    # Detect number of CPU cores
+    cpu_count = multiprocessing.cpu_count()
+    
+    # Set number of workers dynamically
+    num_workers = cpu_count * 5  
+    
+    for _ in range(num_workers):
+        loop.create_task(worker())
+    
+    print(f"Started {num_workers} background workers on {cpu_count} CPU cores.")
 
 
 # Routes
@@ -102,11 +111,21 @@ async def get_job_result(job_id: str):
     Returns:
         dict: A dictionary containing the job status and result (if done).
     """
-    if job_id not in job_results:
+    job = job_results.get(job_id)
+    if not job:
         return {"job_id": job_id, "status": "pending"}
-    return {
+
+    response = {
         "job_id": job_id,
-        "status": job_results[job_id]["status"],
-        "result": job_results[job_id]["result"],
+        "status": job["status"],
+        "result": job["result"],
     }
+
+    # If job is finished, delete it after serving once
+    if job["status"] in ("done", "error") and job["result"] is not None:
+        job_results.pop(job_id, None)
+
+    return response
+
+
 
