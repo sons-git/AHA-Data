@@ -357,7 +357,7 @@ async def web_search(conversation_id: str, content: str = Form(None), timestamp:
             )
 
         job = {
-            "type": "stream",
+            "type": "websearch",
             "conversation_id": conversation_id,
             "content": content,
             "message": message,
