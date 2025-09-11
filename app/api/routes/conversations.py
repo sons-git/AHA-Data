@@ -3,6 +3,7 @@ import traceback
 from typing import List
 from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, UploadFile, File, Form
+from app.database.qdrant_client import get_recent_conversations
 from app.database.redis_client import get_redis_config
 from fastapi.responses import JSONResponse
 
@@ -317,8 +318,13 @@ async def stream_message(conversation_id: str,
         )
 
     
-@router.post("/{conversation_id}/web/search")
-async def web_search(conversation_id: str, content: str = Form(None), timestamp: str = Form(None)):
+@router.post("/{conversation_id}/{user_id}/web/search")
+async def web_search(
+    conversation_id: str, 
+    user_id: str,
+    content: str = Form(None), 
+    timestamp: str = Form(None), 
+    files: List[UploadFile] = File(default=[])):
     """
     Perform a web search and return formatted results.
 
@@ -336,10 +342,20 @@ async def web_search(conversation_id: str, content: str = Form(None), timestamp:
                 "Conversation ID and search query are required",
                 400
             )
+        
+        # Convert UploadFile to FileData
+        file_data_list = []
+        for upload in files:
+            file_bytes = await upload.read()
+            file_data_list.append(FileData(
+                name=upload.filename,
+                type=upload.content_type,
+                file=file_bytes
+            ))
 
         message = Message(
             content=content,
-            image=None,
+            files=file_data_list,
             timestamp=timestamp
         )
 
@@ -355,11 +371,17 @@ async def web_search(conversation_id: str, content: str = Form(None), timestamp:
                 "Search query cannot be empty",
                 400
             )
+        
+        processed_message = await handle_file_processing(message.content, message.files)
+        structured_results, formatted_results = await search(content)
+        processed_message.context = formatted_results
+        processed_message.recent_conversations = await get_recent_conversations(collection_name=user_id, limit=50)
+        final_response = await stream_response(conversation_id, message, processed_message)
 
         job = {
             "type": "websearch",
             "conversation_id": conversation_id,
-            "content": content,
+            "user_id": user_id,
             "message": message,
         }
 

@@ -71,7 +71,7 @@ async def extract_text_from_file(file_data: FileData) -> Optional[str]:
                 return f"Error processing DOCX '{file_data.name}': {e}"
 
     except Exception as e:
-        return (f"Failed to extract text from {file_data.name}: {e}")
+        return f"Failed to extract text from {file_data.name}: {e}"
 
 async def classify_file(files: List[FileData]) -> Tuple[List[FileData], List[FileData], List[FileData]]:
     """
