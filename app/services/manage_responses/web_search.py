@@ -11,6 +11,7 @@ async def search(query: str, conversation_history: str):
     This function sanitizes the query, performs the search, and formats the results.
     Args:
         query (str): The search query.
+        conversation_history (str): The conversation history to provide context for the search.
     Returns:
         tuple: (structured_results, formatted_results)
     Raises:
