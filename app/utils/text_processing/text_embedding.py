@@ -57,8 +57,7 @@ async def compute_dense_vector(text: str = None) -> List[float] | np.ndarray:
         List[float] | np.ndarray: A dense vector representation of the input text.
     """
     embedder = get_dense_embedder()
-    embedded_text = embedder.encode(text)
-    return embedded_text
+    return await asyncio.to_thread(embedder.encode, text)
 
 async def compute_sparse_vector(text: str = None) -> Tuple[List[int], List[float]]:
     """
@@ -77,24 +76,23 @@ async def compute_sparse_vector(text: str = None) -> Tuple[List[int], List[float
             - values (List[float]): Corresponding non-zero values at those indices.
     """
     tokenizer, embedder = get_sparse_embedder_and_tokenizer()
-    tokens = tokenizer(text, return_tensors="pt")
-    output = embedder(**tokens)
-    logits, attention_mask = output.logits, tokens.attention_mask
-    relu_log = torch.log(1 + torch.relu(logits))
-    weighted_log = relu_log * attention_mask.unsqueeze(-1)
-    max_val, _ = torch.max(weighted_log, dim=1)
-    vec = max_val.squeeze()
 
-    # Safely get indices of non-zero values
-    indices = torch.nonzero(vec, as_tuple=True)[0].tolist()
+    def _compute():
+        tokens = tokenizer(text, return_tensors="pt")
+        output = embedder(**tokens)
+        logits, attention_mask = output.logits, tokens.attention_mask
+        relu_log = torch.log(1 + torch.relu(logits))
+        weighted_log = relu_log * attention_mask.unsqueeze(-1)
+        max_val, _ = torch.max(weighted_log, dim=1)
+        vec = max_val.squeeze()
 
-    if isinstance(indices, int):  # if single int, convert to list
+        indices = torch.nonzero(vec, as_tuple=True)[0].tolist()
+        if isinstance(indices, int):
             indices = [indices]
+        values = vec[indices].tolist() if indices else []
+        return indices, values
 
-    # Safely get corresponding values
-    values = vec[indices].tolist() if indices else []
-
-    return indices, values
+    return await asyncio.to_thread(_compute)
 
 async def embed(text: str) -> tuple[list[float], list[int], list[float]]:
     """

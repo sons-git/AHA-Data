@@ -1,45 +1,38 @@
-import httpx
 from typing import List
 from app.database.redis_client import get_redis_config
-from app.schemas.conversations import ProcessedMessage
+from tavily import AsyncTavilyClient
 
+# -------------------- Web Search Service Functions --------------------
 api_keys = get_redis_config("api_keys")
-API_KEY = api_keys["SEARCH_API_KEY"] 
-CX = api_keys["SEARCH_CX"] 
+tavily_client = AsyncTavilyClient(api_key=api_keys["TAVILY_API_KEY"])
 
-async def search(query: str):
-    """
-    Perform a Google Custom Search and format the results.
+async def search(query: str, conversation_history: str):
+    """    
+    This function sanitizes the query, performs the search, and formats the results.
     Args:
         query (str): The search query.
+        conversation_history (str): The conversation history to provide context for the search.
     Returns:
-        ProcessedMessage: formatted search results
+        tuple: (structured_results, formatted_results)
     Raises:
         ValueError: If the query is empty or exceeds length constraints.
     """
     sanitized_query = sanitize_query(query)
+    search_results = await tavily_client.search(
+        query=sanitized_query,
+        max_results=7,
+        country="vietnam",
+        start_date="2025-01-01",
+        context=conversation_history
+    )
 
-    url = "https://www.googleapis.com/customsearch/v1"
-    params = {
-        "key": API_KEY,
-        "cx": CX,
-        "q": sanitized_query,
-        "safe": "active",  # Ensure safe search
-        "num": 5   # limit results
-    }
-
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, params=params)
-        response.raise_for_status()
-        data = response.json()
-
-    items = data.get("items", [])
+    items = search_results.get("results", [])
 
     structured_results = [
         {
             "title": item.get("title", ""),
-            "snippet": item.get("snippet", ""),
-            "link": item.get("link", "")
+            "snippet": item.get("content", ""), 
+            "url": item.get("url", "")
         }
         for item in items
     ]
@@ -49,7 +42,7 @@ async def search(query: str):
             f"Web Search Result {i+1}:\n"
             f"  Title: {r['title']}\n"
             f"  Snippet: {r['snippet']}\n"
-            f"  Link: {r['link']}"
+            f"  URL: {r['url']}"
         )
         for i, r in enumerate(structured_results)
     ]
