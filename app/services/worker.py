@@ -123,8 +123,6 @@ async def get_job_result(job_id: str):
     job = job_results.get(job_id)
     if not job:
         return {"job_id": job_id, "status": "pending"}
-    
-    print("DEBUG job result type:", type(job["result"]))
 
     # If job is finished and contains audio bytes
     if job["status"] == "done" and isinstance(job["result"], (bytes, bytearray)):
