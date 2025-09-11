@@ -3,7 +3,6 @@ import traceback
 from typing import List
 from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, UploadFile, File, Form
-from app.database.qdrant_client import get_recent_conversations
 from app.database.redis_client import get_redis_config
 from fastapi.responses import JSONResponse
 
@@ -371,12 +370,6 @@ async def web_search(
                 "Search query cannot be empty",
                 400
             )
-        
-        processed_message = await handle_file_processing(message.content, message.files)
-        structured_results, formatted_results = await search(content)
-        processed_message.context = formatted_results
-        processed_message.recent_conversations = await get_recent_conversations(collection_name=user_id, limit=50)
-        final_response = await stream_response(conversation_id, message, processed_message)
 
         job = {
             "type": "websearch",

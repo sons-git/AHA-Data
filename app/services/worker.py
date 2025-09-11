@@ -2,14 +2,18 @@ import base64
 from uuid import uuid4
 import multiprocessing
 import httpx
+from app.database.qdrant_client import get_recent_conversations
 from app.database.redis_client import get_redis_config
 from app.services.manage_responses.response_streamer import stream_response
 from app.services.manage_responses.web_search import search
 from app.utils.common import classify_message
 from app.utils.file_processing import handle_file_processing
+from fastapi.responses import StreamingResponse
 
 from fastapi import APIRouter
 import asyncio
+
+from app.utils.text_processing.text_cleaning import clean_text_for_speech
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -40,8 +44,13 @@ async def worker():
                 )
 
             elif job_type == "websearch":
-                search_results = await search(job["message"].content)
-                result = await stream_response(job["conversation_id"], job["message"], search_results)
+                processed_message = await handle_file_processing(job["message"].content, job["message"].files)
+                processed_message.recent_conversations = await get_recent_conversations(collection_name=job["user_id"], limit=50)
+                last_message = processed_message.recent_conversations[-1]
+                structured_results, formatted_results = await search(job["message"].content, last_message)
+                processed_message.context = formatted_results
+                final_response = await stream_response(job["conversation_id"], job["message"], processed_message)
+                result = {"final_response": final_response, "references": structured_results}
 
             elif job_type == "speech_to_text":
                 async with httpx.AsyncClient(base_url=base_url) as client:
@@ -54,16 +63,17 @@ async def worker():
                     result = response.json()
 
             elif job_type == "text_to_speech":
+                text_input = job["data"].get("text")
+                cleaned_text = await clean_text_for_speech(text_input)
                 async with httpx.AsyncClient(base_url=base_url, timeout=300) as client:
                     backend_response = await client.post(
                         "/api/conversations/text_to_speech",
-                        json=job["data"]
+                        json={"text": cleaned_text}
                     )
+                    
                     backend_response.raise_for_status()
                     # Return raw bytes
-                    result = {
-                        "audio": base64.b64encode(backend_response.content).decode("utf-8")
-                    }
+                    result = backend_response.content
 
             job_results[job_id]["status"] = "done"
             job_results[job_id]["result"] = result
@@ -105,27 +115,47 @@ def start_worker(app):
 # Routes
 @router.get("/{job_id}")
 async def get_job_result(job_id: str):
-    """Fetch result of a previously submitted job.
-    Args:
-        job_id (str): The ID of the job to fetch.
-    Returns:
-        dict: A dictionary containing the job status and result (if done).
+    """
+    Fetch result of a previously submitted job.
+    - Returns JSON for text-based results
+    - Returns audio as StreamingResponse if result is bytes
     """
     job = job_results.get(job_id)
     if not job:
         return {"job_id": job_id, "status": "pending"}
+    
+    print("DEBUG job result type:", type(job["result"]))
 
+    # If job is finished and contains audio bytes
+    if job["status"] == "done" and isinstance(job["result"], (bytes, bytearray)):
+        audio_bytes = job["result"]
+
+        async def audio_gen():
+            yield audio_bytes
+            # cleanup after streaming
+            job_results.pop(job_id, None)
+
+        return StreamingResponse(
+            audio_gen(),
+            media_type="audio/mpeg",
+            headers={
+                "Content-Disposition": 'inline; filename="speech.mp3"'
+            }
+        )
+
+    # Otherwise return JSON (normal case)
     response = {
         "job_id": job_id,
         "status": job["status"],
         "result": job["result"],
     }
 
-    # If job is finished, delete it after serving once
+    # Delete finished jobs (non-audio case)
     if job["status"] in ("done", "error") and job["result"] is not None:
         job_results.pop(job_id, None)
 
     return response
+
 
 
 

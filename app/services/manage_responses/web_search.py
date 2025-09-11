@@ -6,7 +6,7 @@ from tavily import AsyncTavilyClient
 api_keys = get_redis_config("api_keys")
 tavily_client = AsyncTavilyClient(api_key=api_keys["TAVILY_API_KEY"])
 
-async def search(query: str, conversation_history: list[str]):
+async def search(query: str, conversation_history: str):
     """    
     This function sanitizes the query, performs the search, and formats the results.
     Args:
@@ -19,9 +19,9 @@ async def search(query: str, conversation_history: list[str]):
     sanitized_query = sanitize_query(query)
     search_results = await tavily_client.search(
         query=sanitized_query,
-        max_results=5,
-        include_raw_content="text",
+        max_results=7,
         country="vietnam",
+        start_date="2025-01-01",
         context=conversation_history
     )
 
@@ -31,7 +31,6 @@ async def search(query: str, conversation_history: list[str]):
         {
             "title": item.get("title", ""),
             "snippet": item.get("content", ""), 
-            "raw_content": item.get("raw_content", ""),
             "url": item.get("url", "")
         }
         for item in items
@@ -42,7 +41,6 @@ async def search(query: str, conversation_history: list[str]):
             f"Web Search Result {i+1}:\n"
             f"  Title: {r['title']}\n"
             f"  Snippet: {r['snippet']}\n"
-            f"  Raw Content: {r['raw_content']}\n"
             f"  URL: {r['url']}"
         )
         for i, r in enumerate(structured_results)
