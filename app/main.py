@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import conversations, auth, model_query, user
 from app.services.manage_models.model_manager import model_manager
+from app.services import worker
+from app.services.worker import start_worker
 
 @asynccontextmanager
 async def lifespan(app):
@@ -28,6 +30,7 @@ async def lifespan(app):
         model_manager.load_models()
         await model_manager.get_model("classifier").classify_text("Warmup text for classifier model")
 
+        start_worker(app) 
         print("Application startup completed successfully!")
         yield
 
@@ -54,3 +57,4 @@ app.include_router(conversations.router)
 app.include_router(auth.router)
 app.include_router(model_query.router)
 app.include_router(user.router)
+app.include_router(worker.router) 
