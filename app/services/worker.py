@@ -22,21 +22,21 @@ base_url = get_redis_config("api_keys")["BACKEND_URL"]
 job_queue: asyncio.Queue = asyncio.Queue()
 job_results = {}
 job_counter = 0
-active_workers = set()  # track workers
-max_workers = multiprocessing.cpu_count() * 2  # cap at 2x CPU cores
 
-# Async Worker (runs forever)
+# Active workers tracked as {name: task}
+active_workers: dict[str, asyncio.Task] = {}
+max_workers = multiprocessing.cpu_count() * 2  # cap at 2x CPU cores
+scaling_lock = asyncio.Lock()  # prevents race conditions
+
+
 async def worker(name: str):
-    """Background worker that processes jobs from the queue.
-    Each worker runs indefinitely until cancelled.
-    Args:
-        name (str): Name of the worker for logging.
-    """
+    """Background worker that processes jobs from the queue."""
     try:
         while True:
             job_id, job = await job_queue.get()
             try:
                 job_type = job["type"]
+
                 if job_type == "stream":
                     processed_file = await handle_file_processing(
                         job["message"].content, job["message"].files
@@ -49,20 +49,31 @@ async def worker(name: str):
                     )
 
                 elif job_type == "websearch":
-                    processed_message = await handle_file_processing(job["message"].content, job["message"].files)
-                    processed_message.recent_conversations = await get_recent_conversations(collection_name=job["user_id"], limit=50)
+                    processed_message = await handle_file_processing(
+                        job["message"].content, job["message"].files
+                    )
+                    processed_message.recent_conversations = await get_recent_conversations(
+                        collection_name=job["user_id"], limit=50
+                    )
                     last_message = processed_message.recent_conversations[-1]
-                    structured_results, formatted_results = await search(job["message"].content, last_message)
+                    structured_results, formatted_results = await search(
+                        job["message"].content, last_message
+                    )
                     processed_message.context = formatted_results
-                    final_response = await stream_response(job["conversation_id"], job["message"], processed_message)
-                    result = {"final_response": final_response, "references": structured_results}
+                    final_response = await stream_response(
+                        job["conversation_id"], job["message"], processed_message
+                    )
+                    result = {
+                        "final_response": final_response,
+                        "references": structured_results,
+                    }
 
                 elif job_type == "speech_to_text":
                     async with httpx.AsyncClient(base_url=base_url) as client:
                         response = await client.post(
                             "/api/conversations/speech_to_text",
                             json=job["data"],
-                            timeout=30.0
+                            timeout=30.0,
                         )
                         response.raise_for_status()
                         result = response.json()
@@ -73,54 +84,52 @@ async def worker(name: str):
                     async with httpx.AsyncClient(base_url=base_url, timeout=300) as client:
                         backend_response = await client.post(
                             "/api/conversations/text_to_speech",
-                            json={"text": cleaned_text}
+                            json={"text": cleaned_text},
                         )
-                        
                         backend_response.raise_for_status()
-                        # Return raw bytes
                         result = backend_response.content
 
                 job_results[job_id]["status"] = "done"
                 job_results[job_id]["result"] = result
+
             except Exception as e:
                 job_results[job_id]["status"] = "error"
                 job_results[job_id]["result"] = str(e)
             finally:
                 job_queue.task_done()
     except asyncio.CancelledError:
-        # worker shut down gracefully
+        # Worker shutdown
         pass
     finally:
-        active_workers.discard(name)
+        active_workers.pop(name, None)
+
 
 async def enqueue_job(job: dict) -> str:
-    """Enqueue a job and spawn a worker if backlog is too high.
-    Args:
-        job (dict): Job details.
-    Returns:
-        str: Unique job ID.
-    """
+    """Enqueue a job and spawn a worker if backlog is too high."""
     job_id = str(uuid4())
     job_results[job_id] = {"status": "pending", "result": None}
     await job_queue.put((job_id, job))
 
-    # scale workers lazily
-    if job_queue.qsize() > len(active_workers) and len(active_workers) < max_workers:
-        loop = asyncio.get_event_loop()
-        worker_name = f"worker-{len(active_workers)+1}"
-        task = loop.create_task(worker(worker_name))
-        active_workers.add(worker_name)
-        print(f"Spawned {worker_name}, total workers: {len(active_workers)}")
+    async with scaling_lock:
+        if job_queue.qsize() > len(active_workers) and len(active_workers) < max_workers:
+            loop = asyncio.get_event_loop()
+            worker_name = f"worker-{len(active_workers)+1}"
+            task = loop.create_task(worker(worker_name))
+            active_workers[worker_name] = task
+            # Cleanup automatically if worker finishes/crashes
+            task.add_done_callback(lambda t, name=worker_name: active_workers.pop(name, None))
+            print(f"Spawned {worker_name}, total workers: {len(active_workers)}")
 
     return job_id
 
-# Kick off worker when app starts 
+
 def start_worker(app):
-    """Start the background worker when the FastAPI app starts."""
+    """Start with a minimal worker pool when the FastAPI app starts."""
     loop = asyncio.get_event_loop()
-    # Start just 1 worker initially
-    loop.create_task(worker("worker-1"))
-    active_workers.add("worker-1")
+    worker_name = "worker-1"
+    task = loop.create_task(worker(worker_name))
+    active_workers[worker_name] = task
+    task.add_done_callback(lambda t, name=worker_name: active_workers.pop(name, None))
     print("Started with 1 worker, scaling will happen dynamically.")
 
 
@@ -148,24 +157,14 @@ async def get_job_result(job_id: str):
         return StreamingResponse(
             audio_gen(),
             media_type="audio/mpeg",
-            headers={
-                "Content-Disposition": 'inline; filename="speech.mp3"'
-            }
+            headers={"Content-Disposition": 'inline; filename="speech.mp3"'},
         )
 
     # Otherwise return JSON (normal case)
-    response = {
-        "job_id": job_id,
-        "status": job["status"],
-        "result": job["result"],
-    }
+    response = {"job_id": job_id, "status": job["status"], "result": job["result"]}
 
     # Delete finished jobs (non-audio case)
     if job["status"] in ("done", "error") and job["result"] is not None:
         job_results.pop(job_id, None)
 
     return response
-
-
-
-
