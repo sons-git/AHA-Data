@@ -1,4 +1,3 @@
-import base64
 from uuid import uuid4
 import multiprocessing
 import httpx
@@ -23,93 +22,106 @@ base_url = get_redis_config("api_keys")["BACKEND_URL"]
 job_queue: asyncio.Queue = asyncio.Queue()
 job_results = {}
 job_counter = 0
+active_workers = set()  # track workers
+max_workers = multiprocessing.cpu_count() * 2  # cap at 2x CPU cores
 
 # Async Worker (runs forever)
-async def worker():
-    """Background worker that processes jobs from the queue."""
-
-    while True:
-        job_id, job = await job_queue.get()
-        try:
-            job_type = job["type"]
-            if job_type == "stream":
-                processed_file = await handle_file_processing(
-                    job["message"].content, job["message"].files
-                )
-                classified_message = await classify_message(
-                    processed_file, job["user_id"]
-                )
-                result = await stream_response(
-                    job["conversation_id"], job["message"], classified_message
-                )
-
-            elif job_type == "websearch":
-                processed_message = await handle_file_processing(job["message"].content, job["message"].files)
-                processed_message.recent_conversations = await get_recent_conversations(collection_name=job["user_id"], limit=50)
-                last_message = processed_message.recent_conversations[-1]
-                structured_results, formatted_results = await search(job["message"].content, last_message)
-                processed_message.context = formatted_results
-                final_response = await stream_response(job["conversation_id"], job["message"], processed_message)
-                result = {"final_response": final_response, "references": structured_results}
-
-            elif job_type == "speech_to_text":
-                async with httpx.AsyncClient(base_url=base_url) as client:
-                    response = await client.post(
-                        "/api/conversations/speech_to_text",
-                        json=job["data"],
-                        timeout=30.0
+async def worker(name: str):
+    """Background worker that processes jobs from the queue.
+    Each worker runs indefinitely until cancelled.
+    Args:
+        name (str): Name of the worker for logging.
+    """
+    try:
+        while True:
+            job_id, job = await job_queue.get()
+            try:
+                job_type = job["type"]
+                if job_type == "stream":
+                    processed_file = await handle_file_processing(
+                        job["message"].content, job["message"].files
                     )
-                    response.raise_for_status()
-                    result = response.json()
-
-            elif job_type == "text_to_speech":
-                text_input = job["data"].get("text")
-                cleaned_text = await clean_text_for_speech(text_input)
-                async with httpx.AsyncClient(base_url=base_url, timeout=300) as client:
-                    backend_response = await client.post(
-                        "/api/conversations/text_to_speech",
-                        json={"text": cleaned_text}
+                    classified_message = await classify_message(
+                        processed_file, job["user_id"]
                     )
-                    
-                    backend_response.raise_for_status()
-                    # Return raw bytes
-                    result = backend_response.content
+                    result = await stream_response(
+                        job["conversation_id"], job["message"], classified_message
+                    )
 
-            job_results[job_id]["status"] = "done"
-            job_results[job_id]["result"] = result
-        except Exception as e:
-            job_results[job_id]["status"] = "error"
-            job_results[job_id]["result"] = str(e)
-        finally:
-            job_queue.task_done()
+                elif job_type == "websearch":
+                    processed_message = await handle_file_processing(job["message"].content, job["message"].files)
+                    processed_message.recent_conversations = await get_recent_conversations(collection_name=job["user_id"], limit=50)
+                    last_message = processed_message.recent_conversations[-1]
+                    structured_results, formatted_results = await search(job["message"].content, last_message)
+                    processed_message.context = formatted_results
+                    final_response = await stream_response(job["conversation_id"], job["message"], processed_message)
+                    result = {"final_response": final_response, "references": structured_results}
+
+                elif job_type == "speech_to_text":
+                    async with httpx.AsyncClient(base_url=base_url) as client:
+                        response = await client.post(
+                            "/api/conversations/speech_to_text",
+                            json=job["data"],
+                            timeout=30.0
+                        )
+                        response.raise_for_status()
+                        result = response.json()
+
+                elif job_type == "text_to_speech":
+                    text_input = job["data"].get("text")
+                    cleaned_text = await clean_text_for_speech(text_input)
+                    async with httpx.AsyncClient(base_url=base_url, timeout=300) as client:
+                        backend_response = await client.post(
+                            "/api/conversations/text_to_speech",
+                            json={"text": cleaned_text}
+                        )
+                        
+                        backend_response.raise_for_status()
+                        # Return raw bytes
+                        result = backend_response.content
+
+                job_results[job_id]["status"] = "done"
+                job_results[job_id]["result"] = result
+            except Exception as e:
+                job_results[job_id]["status"] = "error"
+                job_results[job_id]["result"] = str(e)
+            finally:
+                job_queue.task_done()
+    except asyncio.CancelledError:
+        # worker shut down gracefully
+        pass
+    finally:
+        active_workers.discard(name)
 
 async def enqueue_job(job: dict) -> str:
-    """Enqueue a job for processing and return its job ID.
+    """Enqueue a job and spawn a worker if backlog is too high.
     Args:
-        job (dict): The job data to process.
+        job (dict): Job details.
     Returns:
-        str: The job ID.
+        str: Unique job ID.
     """
     job_id = str(uuid4())
     job_results[job_id] = {"status": "pending", "result": None}
     await job_queue.put((job_id, job))
+
+    # scale workers lazily
+    if job_queue.qsize() > len(active_workers) and len(active_workers) < max_workers:
+        loop = asyncio.get_event_loop()
+        worker_name = f"worker-{len(active_workers)+1}"
+        task = loop.create_task(worker(worker_name))
+        active_workers.add(worker_name)
+        print(f"Spawned {worker_name}, total workers: {len(active_workers)}")
+
     return job_id
 
 # Kick off worker when app starts 
 def start_worker(app):
     """Start the background worker when the FastAPI app starts."""
     loop = asyncio.get_event_loop()
-    
-    # Detect number of CPU cores
-    cpu_count = multiprocessing.cpu_count()
-    
-    # Set number of workers dynamically
-    num_workers = cpu_count * 5  
-    
-    for _ in range(num_workers):
-        loop.create_task(worker())
-    
-    print(f"Started {num_workers} background workers on {cpu_count} CPU cores.")
+    # Start just 1 worker initially
+    loop.create_task(worker("worker-1"))
+    active_workers.add("worker-1")
+    print("Started with 1 worker, scaling will happen dynamically.")
 
 
 # Routes
